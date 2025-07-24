@@ -35,6 +35,7 @@
 pip install -r requirements.txt
 
 ## 配置硬件引脚（修改 config.json）：
+```json
 {
   "led_count": 10,
   "led_brightness": 230,
@@ -48,9 +49,11 @@ pip install -r requirements.txt
 
 ## sudo python app.py
 
+web访问 http://树莓派IP:5000
+
 
 ## 项目结构
-
+```text
 ├── app.py               # 主程序
 ├── config.json          # 配置文件
 ├── requirements.txt     # 依赖列表
