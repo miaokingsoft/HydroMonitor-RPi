@@ -35,7 +35,7 @@
 pip install -r requirements.txt
 
 ## 配置硬件引脚（修改 config.json）：
-
+```markdown
 {
   "led_count": 10,
   "led_brightness": 230,
@@ -46,11 +46,12 @@ pip install -r requirements.txt
   "water_sensor_bottom_pin": 23,
   "dht11_pin": 5
 }
+```
 
-## 配置硬件引脚
-```markdown
-sudo python app.py
-web访问： http://树莓派IP:5000
+## 运行
+
+### 树莓派上执行  sudo python app.py
+### 客户端浏览器或手机访问： http://树莓派IP:5000
 
 
 ## **项目结构**
@@ -66,5 +67,5 @@ web访问： http://树莓派IP:5000
     ├── js
     └── images
 
-
+```
 
