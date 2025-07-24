@@ -49,7 +49,7 @@ pip install -r requirements.txt
 
 ## sudo python app.py
 
-web访问 http://树莓派IP:5000
+## web访问 http://树莓派IP:5000
 
 
 ## 项目结构
