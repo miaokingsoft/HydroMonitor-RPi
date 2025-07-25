@@ -68,4 +68,9 @@ pip install -r requirements.txt
     └── images
 
 ```
+## 联系方式
+- 作者：闲沐工坊
+- 邮箱：7740840@qq.com
+- 抖音：@闲沐工坊
+- QQ：7740840
 
