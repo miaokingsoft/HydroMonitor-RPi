@@ -813,11 +813,11 @@ def feed_fish():
 
         # 4. 检查冷却时间（带容错处理）
         current_time = time.time()
-        if last_feed_time > 0 and (current_time - last_feed_time) < 2 * 3600:
-            remaining = (2 * 3600 - (current_time - last_feed_time)) / 60
+        if last_feed_time > 0 and (current_time - last_feed_time) < 3 * 3600:
+            remaining = (3 * 3600 - (current_time - last_feed_time)) / 60
             return jsonify({
                 "status": "error",
-                "message": f"距离上次投喂不足2小时，请{remaining:.1f}分钟后再试"
+                "message": f"距离上次投喂不足3小时，请{remaining:.1f}分钟后再试"
             }), 429
 
         # 5. 执行投喂（带线程锁）
@@ -935,6 +935,7 @@ def get_feeding_logs():
     return jsonify(logs)
 
 
+
 # 定时任务检查
 def check_feeding_schedules():
     while True:
@@ -1000,6 +1001,29 @@ def check_feeding_schedules():
         time.sleep(60)  # 每分钟检查一次
 
 
+@app.route('/api/feeding/logs/<int:log_id>', methods=['DELETE'])
+def delete_feeding_log(log_id):
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 检查记录是否存在
+        c.execute('SELECT id FROM feeding_logs WHERE id = ?', (log_id,))
+        if not c.fetchone():
+            return jsonify({"status": "error", "message": "记录不存在"}), 404
+        
+        # 删除记录
+        c.execute('DELETE FROM feeding_logs WHERE id = ?', (log_id,))
+        conn.commit()
+        
+        return jsonify({"status": "success", "id": log_id})
+    
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/feeding')
 def feeding():
     """喂食管理页面"""
@@ -1053,6 +1077,19 @@ def get_sensor_data():
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/check_network')
+def check_network():
+    """检查当前是否是内网访问"""
+    client_ip = request.remote_addr
+    is_local = (client_ip == '127.0.0.1' or 
+               client_ip.startswith('192.168.') or               
+               client_ip.startswith('172.'))
+    
+    return jsonify({
+        "is_local": is_local,
+        "client_ip": client_ip
+    })
 
 # ======================
 # 主程序
