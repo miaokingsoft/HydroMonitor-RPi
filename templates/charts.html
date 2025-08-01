@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鱼缸环境数据统计 - 闲沐鱼缸生态远程建设控制系统v0.6</title>
+    <!-- 本地 Bootstrap CSS -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">    
+    <!-- 本地 Font Awesome CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        .btn-group .btn {
+            border-radius: 20px;
+            margin: 0 5px;
+        }
+        .btn-group .btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #0dcaf0;
+            color: #0dcaf0;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px; /* 高度调整为300px以容纳两个图表 */
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .back-link {
+            display: block;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .stat-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        .chart-title {
+            text-align: center;
+            margin: 15px 0 10px;
+            font-size: 1.2rem;
+            color: #0dcaf0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-12">
+                <div class="card p-4 mb-4">
+                    <h1 class="text-center mb-4">
+                        <i class="fas fa-chart-line"></i> 鱼缸监控数据统计
+                    </h1>
+                    
+                    <!-- 统计卡片 -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-label">当前气温</div>
+                                <div class="stat-value" id="current-air-temp">--</div>
+                                <div>°C</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-label">当前水温</div>
+                                <div class="stat-value" id="current-water-temp">--</div>
+                                <div>°C</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-label">当前湿度</div>
+                                <div class="stat-value" id="current-humidity">--</div>
+                                <div>%</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-label">数据点数</div>
+                                <div class="stat-value" id="data-points">--</div>
+                                <div>条记录</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col text-center">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-light active time-range" data-range="day">24小时</button>
+                                <button type="button" class="btn btn-outline-light time-range" data-range="week">一周</button>
+                                <button type="button" class="btn btn-outline-light time-range" data-range="month">一月</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 温度图表 -->
+                    <div class="chart-title">温度监测（室温/水温）</div>
+                    <div class="chart-container">
+                        <canvas id="temperatureChart"></canvas>
+                    </div>
+                    
+                    <!-- 湿度图表 -->
+                    <div class="chart-title">湿度监测</div>
+                    <div class="chart-container">
+                        <canvas id="humidityChart"></canvas>
+                    </div>
+                    
+                    <a href="/" class="btn btn-primary back-link">
+                        <i class="fas fa-arrow-left"></i> 返回控制面板
+                    </a>
+                </div>
+                
+                <footer class="text-center text-white-50">
+                    <p> &copy; 2025 闲沐工坊（请抖音关注） MiaoKing QQ：7740840 | 树莓派4B+ IP: {{ ip }}:{{ port }}</p>
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化图表
+        let temperatureChart;
+        let humidityChart;
+        let gradientCache = {};
+        
+        function createGradient(ctx, colors) {
+            const cacheKey = colors.join('-');
+            if (gradientCache[cacheKey]) {
+                return gradientCache[cacheKey];
+            }
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, colors[0]);
+            gradient.addColorStop(1, colors[1]);
+            
+            gradientCache[cacheKey] = gradient;
+            return gradient;
+        }
+        
+        // 初始化温度图表
+        function initTemperatureChart() {
+            const ctx = document.getElementById('temperatureChart').getContext('2d');
+            
+            temperatureChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: '气温 (°C)',
+                            data: [],
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) return null;
+                                return createGradient(ctx, [
+                                    'rgba(255, 99, 132, 0.6)',
+                                    'rgba(255, 99, 132, 0.1)'
+                                ]);
+                            },
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '水温 (°C)',
+                            data: [],
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) return null;
+                                return createGradient(ctx, [
+                                    'rgba(75, 192, 192, 0.6)',
+                                    'rgba(75, 192, 192, 0.1)'
+                                ]);
+                            },
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        // 气温平均值线
+                        {
+                            label: '气温平均值',
+                            data: [],
+                            borderColor: 'rgba(255, 99, 132, 0.7)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0,
+                            yAxisID: 'y'
+                        },
+                        // 水温平均值线
+                        {
+                            label: '水温平均值',
+                            data: [],
+                            borderColor: 'rgba(75, 192, 192, 0.7)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeOutQuart'
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                tooltipFormat: 'yyyy-MM-dd HH:mm',
+                                displayFormats: {
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                maxRotation: 0,
+                                autoSkip: true,
+                                autoSkipPadding: 20
+                            }
+                        },
+                        y: {
+                            min: 20,  // 设置温度范围下限
+                            max: 40,  // 设置温度范围上限
+                            position: 'left',
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            },
+                            title: {
+                                display: true,
+                                text: '温度 (°C)',
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                font: {
+                                    size: 14,
+                                    family: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                                },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            },
+                            position: 'top',
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                            padding: 15,
+                            usePointStyle: true,
+                            cornerRadius: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(1);
+                                    }
+                                    return label;
+                                },
+                                title: function(tooltipItems) {
+                                    const date = new Date(tooltipItems[0].parsed.x);
+                                    return date.toLocaleString('zh-CN', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 初始化湿度图表
+        function initHumidityChart() {
+            const ctx = document.getElementById('humidityChart').getContext('2d');
+            
+            humidityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: '湿度 (%)',
+                            data: [],
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) return null;
+                                return createGradient(ctx, [
+                                    'rgba(54, 162, 235, 0.6)',
+                                    'rgba(54, 162, 235, 0.1)'
+                                ]);
+                            },
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        // 湿度平均值线
+                        {
+                            label: '湿度平均值',
+                            data: [],
+                            borderColor: 'rgba(54, 162, 235, 0.7)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeOutQuart'
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                tooltipFormat: 'yyyy-MM-dd HH:mm',
+                                displayFormats: {
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                maxRotation: 0,
+                                autoSkip: true,
+                                autoSkipPadding: 20
+                            }
+                        },
+                        y: {
+                            min: 40,  // 设置湿度范围下限
+                            max: 80,  // 设置湿度范围上限
+                            position: 'left',
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            },
+                            title: {
+                                display: true,
+                                text: '湿度 (%)',
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                font: {
+                                    size: 14,
+                                    family: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                                },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            },
+                            position: 'top',
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                            padding: 15,
+                            usePointStyle: true,
+                            cornerRadius: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(1);
+                                    }
+                                    return label;
+                                },
+                                title: function(tooltipItems) {
+                                    const date = new Date(tooltipItems[0].parsed.x);
+                                    return date.toLocaleString('zh-CN', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 加载传感器数据
+        function loadSensorData(range = 'day') {
+            fetch(`/sensor_data?range=${range}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (temperatureChart && humidityChart) {
+                        // 更新统计数据
+                        if (data.air_temps.length > 0) {
+                            document.getElementById('current-air-temp').textContent = 
+                                data.air_temps[data.air_temps.length - 1].toFixed(1);
+                        }
+                        if (data.water_temps.length > 0) {
+                            document.getElementById('current-water-temp').textContent = 
+                                data.water_temps[data.water_temps.length - 1].toFixed(1);
+                        }
+                        if (data.humidities.length > 0) {
+                            document.getElementById('current-humidity').textContent = 
+                                data.humidities[data.humidities.length - 1].toFixed(1);
+                        }
+                        document.getElementById('data-points').textContent = data.times.length;
+                        
+                        // 转换数据格式
+                        const times = data.times.map(time => new Date(time.replace(' ', 'T') + ':00'));
+                        
+                        // 计算平均值
+                        const airTempAvg = calculateAverage(data.air_temps);
+                        const waterTempAvg = calculateAverage(data.water_temps);
+                        const humidityAvg = calculateAverage(data.humidities);
+                        
+                        // 创建平均值数据集
+                        const airTempAvgData = times.map(time => ({ x: time, y: airTempAvg }));
+                        const waterTempAvgData = times.map(time => ({ x: time, y: waterTempAvg }));
+                        const humidityAvgData = times.map(time => ({ x: time, y: humidityAvg }));
+                        
+                        // 更新温度图表数据
+                        temperatureChart.data.datasets[0].data = times.map((time, index) => ({
+                            x: time,
+                            y: data.air_temps[index]
+                        }));
+                        
+                        temperatureChart.data.datasets[1].data = times.map((time, index) => ({
+                            x: time,
+                            y: data.water_temps[index]
+                        }));
+                        
+                        temperatureChart.data.datasets[2].data = airTempAvgData;
+                        temperatureChart.data.datasets[3].data = waterTempAvgData;
+                        
+                        // 更新湿度图表数据
+                        humidityChart.data.datasets[0].data = times.map((time, index) => ({
+                            x: time,
+                            y: data.humidities[index]
+                        }));
+                        
+                        humidityChart.data.datasets[1].data = humidityAvgData;
+                        
+                        // 根据时间范围调整X轴单位
+                        if (range === 'day') {
+                            temperatureChart.options.scales.x.time.unit = 'hour';
+                            humidityChart.options.scales.x.time.unit = 'hour';
+                        } else if (range === 'week') {
+                            temperatureChart.options.scales.x.time.unit = 'day';
+                            humidityChart.options.scales.x.time.unit = 'day';
+                        } else {
+                            temperatureChart.options.scales.x.time.unit = 'day';
+                            humidityChart.options.scales.x.time.unit = 'day';
+                        }
+                        
+                        temperatureChart.update();
+                        humidityChart.update();
+                    }
+                });
+        }
+        
+        // 计算平均值
+        function calculateAverage(values) {
+            if (values.length === 0) return 0;
+            const sum = values.reduce((a, b) => a + b, 0);
+            return sum / values.length;
+        }
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化图表
+            initTemperatureChart();
+            initHumidityChart();
+            
+            // 加载初始数据（默认24小时）
+            loadSensorData('day');
+            
+            // 时间范围按钮事件
+            document.querySelectorAll('.time-range').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // 移除所有active类
+                    document.querySelectorAll('.time-range').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    
+                    // 为当前按钮添加active类
+                    this.classList.add('active');
+                    
+                    // 加载新数据
+                    loadSensorData(this.dataset.range);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

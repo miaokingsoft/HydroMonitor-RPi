@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>闲沐鱼缸监控系统v0.5</title>
+    <title>闲沐鱼缸生态监测远控系统v1.2</title>
     <!-- 本地 Bootstrap CSS -->
-    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">    
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
     <!-- 本地 Font Awesome CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
-    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>    
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <!-- 本地 iro.js -->
     <script src="{{ url_for('static', filename='js/iro.min.js') }}"></script>
     <style>
@@ -22,37 +23,51 @@
             --bs-body-color: #fff;
             --switch-on-bg: #4cd964;
             --switch-off-bg: #e5e5ea;
-            --water-high-color: #dc3545;      /* 水位过高 */
-            --water-normal-color: #28a745;    /* 水位正常 */
-            --water-low-color: #ffc107;       /* 水位过低 */
-            --water-unknown-color: #6c757d;   /* 未知状态 */
-            --temp-normal-color: #17a2b8;      /* 温度正常 */
-            --temp-high-color: #dc3545;        /* 温度过高 */
-            --humidity-normal-color: #6f42c1;  /* 湿度正常 */
-            --humidity-high-color: #fd7e14;    /* 湿度过高 */
+            --water-high-color: #dc3545;
+            /* 水位过高 */
+            --water-normal-color: #28a745;
+            /* 水位正常 */
+            --water-low-color: #ffc107;
+            /* 水位过低 */
+            --water-unknown-color: #6c757d;
+            /* 未知状态 */
+            --temp-normal-color: #17a2b8;
+            /* 温度正常 */
+            --temp-high-color: #dc3545;
+            /* 温度过高 */
+            --humidity-normal-color: #6f42c1;
+            /* 湿度正常 */
+            --humidity-high-color: #fd7e14;
+            /* 湿度过高 */
+            --temp-water-normal: #17a2b8;
+            /* 正常水温颜色 */
+            --temp-water-high: #dc3545;
+            /* 水温过高颜色 */
         }
-        
+
         body {
             background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+
         /* 添加温湿度状态样式 */
         .temp-normal {
             background-color: var(--temp-normal-color);
         }
-        
+
         .temp-high {
             background-color: var(--temp-high-color);
         }
-        
+
         .humidity-normal {
             background-color: var(--humidity-normal-color);
         }
-        
+
         .humidity-high {
             background-color: var(--humidity-high-color);
         }
+
         .card {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -61,7 +76,7 @@
             box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
             color: #fff;
         }
-        
+
         .status-badge {
             font-size: 1.2rem;
             padding: 10px 20px;
@@ -71,31 +86,31 @@
             min-width: 180px;
             text-align: center;
         }
-        
+
         .active {
             background-color: var(--active-color);
         }
-        
+
         .idle {
             background-color: var(--idle-color);
         }
-        
+
         .fan-active {
             background-color: var(--fan-active-color);
         }
-        
+
         .fan-idle {
             background-color: var(--fan-idle-color);
         }
-        
+
         .pump-active {
             background-color: var(--pump-active-color);
         }
-        
+
         .pump-idle {
             background-color: var(--pump-idle-color);
         }
-        
+
         .btn-control {
             font-size: 1.2rem;
             padding: 12px 24px;
@@ -103,22 +118,22 @@
             border-radius: 50px;
             transition: transform 0.2s;
         }
-        
+
         .btn-control:hover {
             transform: translateY(-3px);
         }
-        
+
         .btn-test {
             background-color: #ffc107;
             color: #000;
         }
-        
+
         .config-panel {
             background: rgba(0, 0, 0, 0.3);
             border-radius: 15px;
             padding: 20px;
         }
-        
+
         .fish-animation {
             position: absolute;
             width: 50px;
@@ -127,14 +142,25 @@
             animation: swim 15s linear infinite;
             opacity: 0.6;
         }
-        
+
         @keyframes swim {
-            0% { transform: translateX(-100px) scaleX(1); }
-            50% { transform: translateX(calc(100vw + 100px)) scaleX(1); }
-            51% { transform: translateX(calc(100vw + 100px)) scaleX(-1); }
-            100% { transform: translateX(-100px) scaleX(-1); }
+            0% {
+                transform: translateX(-100px) scaleX(1);
+            }
+
+            50% {
+                transform: translateX(calc(100vw + 100px)) scaleX(1);
+            }
+
+            51% {
+                transform: translateX(calc(100vw + 100px)) scaleX(-1);
+            }
+
+            100% {
+                transform: translateX(-100px) scaleX(-1);
+            }
         }
-        
+
         .status-container {
             display: flex;
             justify-content: center;
@@ -142,14 +168,14 @@
             margin-bottom: 20px;
             gap: 10px;
         }
-        
+
         .control-row {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 20px;
         }
-        
+
         .control-group {
             flex: 1;
             min-width: 250px;
@@ -159,19 +185,19 @@
             padding: 15px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         }
-        
+
         .control-header {
             text-align: center;
             margin-bottom: 15px;
             font-size: 1.4rem;
         }
-        
+
         .control-buttons {
             display: flex;
             flex-direction: column;
             align-items: center;
         }
-        
+
         /* iOS风格开关样式 */
         .switch-container {
             display: flex;
@@ -180,26 +206,26 @@
             margin-top: 10px;
             width: 100%;
         }
-        
+
         .switch-label {
             margin-bottom: 8px;
             font-size: 1rem;
             font-weight: 500;
         }
-        
+
         .ios-switch {
             position: relative;
             display: inline-block;
             width: 60px;
             height: 34px;
         }
-        
+
         .ios-switch input {
             opacity: 0;
             width: 0;
             height: 0;
         }
-        
+
         .slider {
             position: absolute;
             cursor: pointer;
@@ -211,7 +237,7 @@
             transition: .4s;
             border-radius: 34px;
         }
-        
+
         .slider:before {
             position: absolute;
             content: "";
@@ -222,45 +248,45 @@
             background-color: white;
             transition: .4s;
             border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        
-        input:checked + .slider {
+
+        input:checked+.slider {
             background-color: var(--switch-on-bg);
         }
-        
-        input:checked + .slider:before {
+
+        input:checked+.slider:before {
             transform: translateX(26px);
         }
-        
+
         /* 设备特定开关颜色 */
-        #ledSwitch:checked + .slider {
+        #ledSwitch:checked+.slider {
             background-color: var(--active-color);
         }
-        
-        #fanSwitch:checked + .slider {
+
+        #fanSwitch:checked+.slider {
             background-color: var(--fan-active-color);
         }
-        
-        #pumpSwitch:checked + .slider {
+
+        #pumpSwitch:checked+.slider {
             background-color: var(--pump-active-color);
         }
-        
+
         /* 设备状态标签 */
         .device-status {
             margin-top: 8px;
             font-size: 0.9rem;
             font-weight: 500;
         }
-        
+
         .status-on {
             color: var(--active-color);
         }
-        
+
         .status-off {
             color: #ccc;
         }
-        
+
         @media (max-width: 992px) {
             .control-group {
                 min-width: 100%;
@@ -271,32 +297,113 @@
         .water-high {
             background-color: var(--water-high-color);
         }
-        
+
         .water-normal {
             background-color: var(--water-normal-color);
         }
-        
+
         .water-low {
             background-color: var(--water-low-color);
         }
-        
+
         .water-unknown {
             background-color: var(--water-unknown-color);
         }
+
+        /* 添加水温状态样式 */
+        .temp-water-normal {
+            background-color: var(--temp-water-normal);
+        }
+
+        .temp-water-high {
+            background-color: var(--temp-water-high);
+        }
+
+        /* 添加以下样式 */
+        #liveContainer {
+            border-radius: 0 0 15px 15px;
+            overflow: hidden;
+            height: 0;
+            padding-bottom: 56.25%;
+            /* 16:9 比例 */
+            position: relative;
+        }
+
+        #liveImage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 移动设备适配 - 填满屏幕宽度 */
+        @media (max-width: 768px) {
+            #liveContainer {
+                padding-bottom: 75%;
+                /* 4:3 比例，更适合手机 */
+            }
+
+            .card {
+                border-radius: 0 !important;
+            }
+
+            .card-header {
+                border-radius: 0 !important;
+            }
+
+            #liveContainer {
+                border-radius: 0 !important;
+            }
+        }
+
+        .btn-disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+        }
+
+        .btn-disabled:hover {
+            transform: none !important;
+        }
     </style>
 </head>
+
 <body>
 
-    
+
     <div class="container py-5">
         <div class="row justify-content-center">
             <div class="col-lg-10">
                 <div class="card p-4 mb-4">
                     <h1 class="text-center mb-4">
-                        <i class="fas fa-fish"></i> 闲沐鱼缸监控系统V0.5
+                        <i class="fas fa-fish"></i> 闲沐鱼缸生态监测远控系统v1.2
                     </h1>
-                    
+
+                    <!-- 修改直播容器部分 -->
+                    <div class="row mb-4 mt-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-video"></i> 鱼缸实时直播
+                                    <span id="networkBadge" class="badge bg-success ms-2">内网模式</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="liveContainer" style="background-color: hsl(0, 0%, 25%);">
+                                        <img id="liveImage" class="img-fluid w-100" style="display: block;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="status-container">
+                        <!-- 添加水温状态块 -->
+                        <div id="waterTempStatus" class="status-badge">
+                            <i class="fas fa-spinner fa-spin"></i> 检测中...
+                        </div>
                         <!-- 温湿度状态块 -->
                         <div id="tempStatus" class="status-badge">
                             <i class="fas fa-spinner fa-spin"></i> 检测中...
@@ -304,21 +411,18 @@
                         <div id="humidityStatus" class="status-badge">
                             <i class="fas fa-spinner fa-spin"></i> 检测中...
                         </div>
-                                            
-                        
-                        
-                         <!-- 水位状态块 -->
-                         <div id="waterStatus" class="status-badge">
+                        <!-- 水位状态块 -->
+                        <div id="waterStatus" class="status-badge">
                             <i class="fas fa-spinner fa-spin"></i> 检测中...
                         </div>
                     </div>
-                    
+
                     <div class="control-row">
                         <!-- LED 控制组 -->
                         <div class="control-group">
                             <div id="status" class="status-badge">
                                 <i class="fas fa-lightbulb"></i> 加载中...
-                            </div>                            
+                            </div>
                             <div class="control-buttons">
                                 <div class="switch-container">
                                     <span class="switch-label">灯带开关</span>
@@ -330,7 +434,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- 风扇控制组 -->
                         <div class="control-group">
                             <div id="fanStatus" class="status-badge">
@@ -347,7 +451,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- 气泵控制组 -->
                         <div class="control-group">
                             <div id="pumpStatus" class="status-badge">
@@ -365,40 +469,56 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="row mb-4 mt-4">
-                        <div class="col-12">
+                        <div class="col-md-6">
                             <button id="testBuzzerBtn" class="btn btn-warning btn-control w-100 btn-test">
-                                <i class="fas fa-bell"></i> 签到（蜂鸣器提醒）
+                                <i class="fas fa-bell"></i> 签到
                             </button>
+                            <div class="text-center mt-2 text-white">
+                                <i class="fas fa-volume-up"></i> 蜂鸣器提醒
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/feeding" class="btn btn-info btn-control w-100">
+                                <i class="fas fa-bone"></i> 投喂管理
+                            </a>
+                            <!-- 替换为新的投喂按钮 
+                            <button id="feedBtn" class="btn btn-info btn-control w-100">
+                                <i class="fas fa-bone"></i> 投喂鱼食
+                            </button>
+                            -->
+                           <div class="text-center mt-2 text-white" id="feedStatus">
+                                <i class="fas fa-clock"></i> 上次投喂: <span id="lastFeedTime">无记录</span>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="config-panel mb-4">                       
-                        
-                        <div class="mb-3">
+
+                    <div class="config-panel mb-4">
+
+                        <div class="mb-4">
                             <label class="form-label">亮度: <span id="brightnessValue">200</span></label>
                             <input type="range" class="form-range" id="brightness" min="0" max="255" value="200">
                         </div>
 
                     </div>
-                    <div class="config-panel mb-4 row">                        
+                    <div class="config-panel mb-4 row">
                         <div class="col">
                             <label class="form-label">激活时颜色</label>
                             <div id="activeColorPicker" class="mb-4"></div>
                         </div>
-                        
+
                         <div class="col">
                             <label class="form-label">空闲时颜色</label>
                             <div id="idleColorPicker" class="mb-4"></div>
                         </div>
                     </div>
-                    <div class="config-panel mb-4">    
+                    <div class="config-panel mb-4">
                         <button id="saveConfigBtn" class="btn btn-primary w-100">
                             <i class="fas fa-save"></i> 保存设置
                         </button>
                     </div>
-                    
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="card p-3 mb-3">
@@ -423,20 +543,26 @@
                             <div class="card p-3">
                                 <h4><i class="fas fa-link"></i> 快速访问</h4>
                                 <div class="d-grid gap-2">
-                                    <a href="http://192.168.0.216:8081" target="_blank" class="btn btn-info">
-                                        <i class="fas fa-video"></i> 查看鱼缸直播（内网）
+                                    <a href="/charts" class="btn btn-success">
+                                        <i class="fas fa-chart-line"></i> 查看温度历史数据
+                                    </a>
+                                    
+                                    <a href="http://192.168.0.216:8081" target="_blank" class="btn btn-secondary">
+                                        <i class="fas fa-video"></i> 仅鱼缸直播画面（内网）
                                     </a>
                                     <a href="http://www.wwzu.com/yugang.html" target="_blank" class="btn btn-secondary">
-                                        <i class="fas fa-cog"></i> 查看鱼缸直播（公网）
+                                        <i class="fas fa-cog"></i> 仅鱼缸直播画面（公网）
                                     </a>
+
+
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <footer class="text-center text-white-50">
-                    <p>鱼缸监控系统 &copy; 2025 闲沐工坊（请抖音关注） MiaoKing QQ：7740840 | 树莓派IP: {{ ip }}:{{ port }}</p>
+                    <p> &copy; 2025 闲沐工坊（请抖音关注） MiaoKing QQ：7740840 | 树莓派4B+ IP: {{ ip }}:{{ port }}</p>
                 </footer>
             </div>
         </div>
@@ -448,12 +574,12 @@
             width: 200,
             color: "#00ff00"
         });
-        
+
         const idleColorPicker = new iro.ColorPicker('#idleColorPicker', {
             width: 200,
             color: "#000000"
         });
-        
+
         // 获取元素
         //const ledCountSlider = document.getElementById('ledCount');
         const brightnessSlider = document.getElementById('brightness');
@@ -468,26 +594,30 @@
         const lastActivitySpan = document.getElementById('lastActivity');
         const cpuTempSpan = document.getElementById('cpuTemp');
         const memUsageSpan = document.getElementById('memUsage');
-        
+
         // 获取开关元素
         const ledSwitch = document.getElementById('ledSwitch');
         const fanSwitch = document.getElementById('fanSwitch');
         const pumpSwitch = document.getElementById('pumpSwitch');
-        
+
         // 获取状态文本元素
         const ledStatus = document.getElementById('ledStatus');
         const fanStatusText = document.getElementById('fanStatusText');
         const pumpStatusText = document.getElementById('pumpStatusText');
-        
+
+        // ... 获取投喂按钮元素 ...
+        const feedBtn = document.getElementById('feedBtn');
+        const feedStatus = document.getElementById('feedStatus');
+
         // 更新滑块值显示
         //ledCountSlider.addEventListener('input', () => {
         //    ledCountValue.textContent = ledCountSlider.value;
         //});
-        
+
         brightnessSlider.addEventListener('input', () => {
             brightnessValue.textContent = brightnessSlider.value;
         });
-        
+
         // 灯带开关控制
         ledSwitch.addEventListener('change', () => {
             const endpoint = ledSwitch.checked ? '/activate' : '/deactivate';
@@ -503,7 +633,7 @@
                     }
                 });
         });
-        
+
         // 风扇开关控制
         fanSwitch.addEventListener('change', () => {
             const endpoint = fanSwitch.checked ? '/fan/on' : '/fan/off';
@@ -518,7 +648,7 @@
                     }
                 });
         });
-        
+
         // 气泵开关控制
         pumpSwitch.addEventListener('change', () => {
             const endpoint = pumpSwitch.checked ? '/pump/on' : '/pump/off';
@@ -533,7 +663,7 @@
                     }
                 });
         });
-        
+
         // 测试蜂鸣器
         testBuzzerBtn.addEventListener('click', () => {
             fetch('/test_buzzer')
@@ -544,7 +674,8 @@
                     }
                 });
         });
-        
+
+
         // 保存配置
         saveConfigBtn.addEventListener('click', () => {
             const config = {
@@ -561,46 +692,46 @@
                     idleColorPicker.color.rgb.b
                 ]
             };
-            
+
             fetch('/update_config', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.message || '保存失败');
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.status === 'success') {
-                    showAlert('配置保存成功!', 'success');
-                    fetch('/reinit_leds');
-                } else {
-                    showAlert(data.message || '保存失败', 'danger');
-                }
-            })
-            .catch(error => {
-                showAlert(`错误: ${error.message}`, 'danger');
-                console.error('保存配置失败:', error);
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.message || '保存失败');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert('配置保存成功!', 'success');
+                        fetch('/reinit_leds');
+                    } else {
+                        showAlert(data.message || '保存失败', 'danger');
+                    }
+                })
+                .catch(error => {
+                    showAlert(`错误: ${error.message}`, 'danger');
+                    console.error('保存配置失败:', error);
+                });
         });
-        
+
         // 更新设备状态文本
         function updateDeviceStatusText() {
             ledStatus.textContent = ledSwitch.checked ? '开启' : '关闭';
             ledStatus.className = `device-status ${ledSwitch.checked ? 'status-on' : 'status-off'}`;
-            
+
             fanStatusText.textContent = fanSwitch.checked ? '开启' : '关闭';
             fanStatusText.className = `device-status ${fanSwitch.checked ? 'status-on' : 'status-off'}`;
-            
+
             pumpStatusText.textContent = pumpSwitch.checked ? '开启' : '关闭';
             pumpStatusText.className = `device-status ${pumpSwitch.checked ? 'status-on' : 'status-off'}`;
         }
-        
+
         // 更新状态
         function updateStatus() {
             fetch('/status')
@@ -616,7 +747,7 @@
                         statusBadge.className = 'status-badge idle';
                         ledSwitch.checked = false;
                     }
-                    
+
                     // 更新风扇状态
                     if (data.fan_enabled) {
                         fanStatusBadge.innerHTML = '<i class="fas fa-fan"></i> 风扇已开启';
@@ -627,7 +758,7 @@
                         fanStatusBadge.className = 'status-badge fan-idle';
                         fanSwitch.checked = false;
                     }
-                    
+
                     // 更新气泵状态
                     if (data.pump_enabled) {
                         pumpStatusBadge.innerHTML = '<i class="fas fa-wind"></i> 气泵已开启';
@@ -638,13 +769,13 @@
                         pumpStatusBadge.className = 'status-badge pump-idle';
                         pumpSwitch.checked = false;
                     }
-                    
+
                     // 更新设备状态文本
                     updateDeviceStatusText();
-                    
+
                     // 更新系统信息
                     connectionsSpan.textContent = data.connections;
-                    lastActivitySpan.textContent = data.last_activity ? 
+                    lastActivitySpan.textContent = data.last_activity ?
                         new Date(data.last_activity * 1000).toLocaleTimeString() : '--:--:--';
                     cpuTempSpan.textContent = data.cpu_temp || '--';
                     memUsageSpan.textContent = data.mem_usage || '--';
@@ -652,8 +783,8 @@
                     // 更新水位状态
                     const waterStatusBadge = document.getElementById('waterStatus');
                     const waterLevel = data.water_level;
-                    
-                    switch(waterLevel) {
+
+                    switch (waterLevel) {
                         case 'high':
                             waterStatusBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 水位过高';
                             waterStatusBadge.className = 'status-badge water-high';
@@ -674,7 +805,7 @@
                     // 更新温湿度状态
                     const tempStatus = document.getElementById('tempStatus');
                     const humidityStatus = document.getElementById('humidityStatus');
-                    
+
                     // 温度状态
                     if (data.temperature !== null) {
                         const temp = data.temperature;
@@ -684,7 +815,7 @@
                         tempStatus.innerHTML = '<i class="fas fa-question-circle"></i> 温度未知';
                         tempStatus.className = 'status-badge water-unknown';
                     }
-                    
+
                     // 湿度状态
                     if (data.humidity !== null) {
                         const humidity = data.humidity;
@@ -694,23 +825,94 @@
                         humidityStatus.innerHTML = '<i class="fas fa-question-circle"></i> 湿度未知';
                         humidityStatus.className = 'status-badge water-unknown';
                     }
+
+                    // 更新水温状态
+                    const waterTempStatus = document.getElementById('waterTempStatus');
+                    if (data.water_temp !== null) {
+                        const waterTemp = data.water_temp;
+                        waterTempStatus.innerHTML = `<i class="fas fa-water"></i> ${waterTemp}°C`;
+                        // 假设超过30度认为过高
+                        waterTempStatus.className = `status-badge ${waterTemp > 30 ? 'temp-water-high' : 'temp-water-normal'}`;
+                    } else {
+                        waterTempStatus.innerHTML = '<i class="fas fa-question-circle"></i> 水温未知';
+                        waterTempStatus.className = 'status-badge water-unknown';
+                    }
+
+                    // 通过数据库获取上次投喂时间
+                    if (data.feed_hours_ago !== null) {
+                        const hours = data.feed_hours_ago;
+                        let displayText;
+                        
+                        if (hours < 1) {
+                            const minutes = Math.round(hours * 60);
+                            displayText = `${minutes}分钟前`;
+                        } else if (hours < 24) {
+                            displayText = `${hours.toFixed(1)}小时前`;
+                        } else {
+                            displayText = `${Math.round(hours/24)}天前`;
+                        }
+                        
+                        document.getElementById('lastFeedTime').textContent = displayText;
+                    } else {
+                        document.getElementById('lastFeedTime').textContent = '无记录';
+                    }
+
                 });
         }
-        
+
         // 显示通知
         function showAlert(message, type) {
             const alert = document.createElement('div');
             alert.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3`;
             alert.style.zIndex = '9999';
             alert.textContent = message;
-            
+
             document.body.appendChild(alert);
-            
+
             setTimeout(() => {
                 alert.remove();
             }, 3000);
         }
-        
+
+
+        // 修改detectNetwork函数
+        function detectNetwork() {
+            const networkBadge = document.getElementById('networkBadge');
+            const liveImage = document.getElementById('liveImage');
+
+            // 检查是否是内网IP
+            const isLocalNetwork = window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1' ||
+                window.location.hostname.startsWith('192.168') ||
+                window.location.hostname.startsWith('172.') ||
+                window.location.hostname.startsWith('10.');
+
+            if (isLocalNetwork) {
+                // 内网使用树莓派直连地址
+                liveImage.src = "http://192.168.0.216:8081/snapshot";
+                networkBadge.textContent = "内网模式";
+                networkBadge.className = "badge bg-success ms-2";
+            } else {
+                // 公网使用您提供的地址
+                liveImage.src = "http://175.178.163.37:18081/";
+                networkBadge.textContent = "公网模式";
+                networkBadge.className = "badge bg-warning ms-2";
+            }
+
+            // 设置图片尺寸为640x360
+            //liveImage.width = 640;
+            //liveImage.height = 360;
+        }
+
+        // 添加定时刷新图片的函数
+        function refreshLiveImage() {
+            const liveImage = document.getElementById('liveImage');
+            const src = liveImage.src;
+
+            // 避免缓存问题
+            liveImage.src = src.split('?')[0] + '?t=' + new Date().getTime();
+        }
+
         // 初始化页面
         function initPage() {
             // 获取初始配置
@@ -722,22 +924,29 @@
                     brightnessSlider.value = config.led_brightness;
                     //ledCountValue.textContent = config.led_count;
                     brightnessValue.textContent = config.led_brightness;
-                    
+
                     // 设置颜色选择器
                     activeColorPicker.color.rgb = config.active_color;
                     idleColorPicker.color.rgb = config.idle_color;
                 });
-            
+
             // 每2秒更新一次状态
             setInterval(updateStatus, 2000);
             updateStatus();
-            
+
+            // 检测网络环境并设置直播源
+            detectNetwork();
+
             // 每10秒更新一次系统信息
-            setInterval(updateStatus, 10000);
+            setInterval(updateStatus, 20000);
         }
-        
+
+
+
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', initPage);
     </script>
 </body>
+
 </html>
