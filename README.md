@@ -55,7 +55,11 @@ pip install -r requirements.txt
 
 ## 运行
 
-### 树莓派上执行  sudo python app.py
+### 树莓派上执行  
+```markdown
+sudo python app.py
+sudo python fishtank.py
+```
 ### 客户端浏览器或手机访问： http://树莓派IP:5000
 
 
@@ -63,10 +67,16 @@ pip install -r requirements.txt
 ```markdown
 ├── app.py               # 主程序
 ├── config.json          # 配置文件
+├── config_fishtank.json          # 水温、水位、湿度、室温实时监控配置文件
+├── fishtank.py          # 水温、水位、湿度、室温采集执行程序
+├── opendb.py          # 数据库初始化程序
+├── sg90180.py         # 舵机控制库，用于喂食时控制舵机
 ├── requirements.txt     # 依赖列表
 ├── README.md            # 项目文档
 ├── templates
 │   └── index.html       # 前端页面
+|   └── feeding.html     # 喂食计划管理页面
+|   └── charts.html     # 环境数据统计页面
 └── static               # 静态资源
     ├── css
     ├── js
@@ -74,7 +84,7 @@ pip install -r requirements.txt
 
 ```
 ## 联系方式
-- 作者：闲沐工坊
+- 作者：MiaoKing
 - 邮箱：7740840@qq.com
 - 抖音：@闲沐工坊
 - QQ：7740840
