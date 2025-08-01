@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,25 +12,31 @@
             transition: all 0.3s;
             margin-bottom: 15px;
         }
+
         .schedule-card:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
+
         .day-btn {
             width: 36px;
             height: 36px;
             padding: 0;
         }
+
         .portion-btn {
             width: 50px;
         }
+
         .log-entry {
             border-left: 4px solid #0d6efd;
             margin-bottom: 10px;
         }
+
         .header {
             padding-bottom: 10px;
             border-bottom: 1px solid #e5e5e5;
         }
+
         .bs-example {
             margin: 20px auto;
             background-color: #fff;
@@ -39,18 +46,61 @@
             box-shadow: none;
             text-align: center;
         }
+
         .footer {
             margin-top: 30px;
             padding-top: 20px;
             border-top: 1px solid #e5e5e5;
         }
+
+        /* 消息提示动画 */
+        .fade-in {
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .delete-log-btn {
+            transition: all 0.2s;
+        }
+
+        .delete-log-btn:hover {
+            transform: scale(1.1);
+            color: #dc3545 !important;
+            border-color: #dc3545 !important;
+        }
+
+        .log-entry {
+            transition: all 0.3s;
+            overflow: hidden;
+        }
+
+        .log-entry:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
+
 <body>
+    <!-- 消息提示容器 - 固定在顶部 -->
+    <div id="messageAlert" class="alert alert-dismissible fade show position-fixed top-0 start-0 end-0 m-0 rounded-0" style="display: none; z-index: 9999;">
+        <span id="messageText"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
     <div class="container py-4">
         <div class="header clearfix">
             <div class="bs-example">
-                <h2 class="mb-4"><i class="fas fa-clock"></i> 喂食计划管理</h2>     
+                <h2 class="mb-4"><i class="fas fa-clock"></i> 喂食计划管理</h2>
             </div>
             <nav>
                 <ul class="nav nav-pills pull-right">
@@ -58,11 +108,11 @@
                         <a href="/" class="btn btn-primary back-link">
                             <i class="fas fa-arrow-left"></i> 返回控制面板
                         </a>
-                    </li>                    
+                    </li>
                 </ul>
             </nav>
         </div>
-        
+
         <div class="row">
             <!-- 喂食计划列表 -->
             <div class="col-md-7">
@@ -82,7 +132,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 手动喂食和记录 -->
             <div class="col-md-5">
                 <div class="card mb-4">
@@ -103,7 +153,7 @@
                         </button>
                     </div>
                 </div>
-                
+
                 <div class="card">
                     <div class="card-header d-flex justify-content-between">
                         <span><i class="fas fa-history"></i> 喂食记录</span>
@@ -119,12 +169,12 @@
                 </div>
             </div>
         </div>
-        
+
         <footer class="footer text-center">
             <p>© 2025 闲沐工坊（请抖音关注） MiaoKing QQ：7740840</p>
         </footer>
     </div>
-    
+
     <!-- 计划编辑模态框 -->
     <div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
@@ -160,9 +210,12 @@
                         <div class="mb-3">
                             <label class="form-label">投喂量</label>
                             <div class="btn-group w-100">
-                                <button type="button" class="btn btn-outline-primary portion-btn active" data-portion="1">1次</button>
-                                <button type="button" class="btn btn-outline-primary portion-btn" data-portion="2">2次</button>
-                                <button type="button" class="btn btn-outline-primary portion-btn" data-portion="3">3次</button>
+                                <button type="button" class="btn btn-outline-primary portion-btn active"
+                                    data-portion="1">1次</button>
+                                <button type="button" class="btn btn-outline-primary portion-btn"
+                                    data-portion="2">2次</button>
+                                <button type="button" class="btn btn-outline-primary portion-btn"
+                                    data-portion="3">3次</button>
                             </div>
                             <input type="hidden" id="portionSize" value="1">
                         </div>
@@ -179,24 +232,27 @@
             </div>
         </div>
     </div>
-    
+
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <script>
         // 全局变量
         let currentScheduleId = null;
         let selectedDays = [1, 2, 3, 4, 5]; // 默认工作日
-        
+        let isLocalNetwork = false;
+
         // DOM加载完成后初始化
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // 加载喂食计划和记录
             loadSchedules();
             loadFeedingLogs();
-            
+
             // 初始化模态框
             const scheduleModal = new bootstrap.Modal('#scheduleModal');
-            
+
+            checkNetworkEnvironment();
+
             // 添加计划按钮
-            document.getElementById('addScheduleBtn').addEventListener('click', function() {
+            document.getElementById('addScheduleBtn').addEventListener('click', function () {
                 currentScheduleId = null;
                 document.getElementById('modalTitle').textContent = '添加喂食计划';
                 document.getElementById('scheduleForm').reset();
@@ -205,13 +261,13 @@
                 updateDayButtons();
                 scheduleModal.show();
             });
-            
+
             // 星期选择按钮
             document.querySelectorAll('.day-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', function () {
                     const day = parseInt(this.dataset.day);
                     const index = selectedDays.indexOf(day);
-                    
+
                     if (index === -1) {
                         selectedDays.push(day);
                         this.classList.add('active');
@@ -219,22 +275,22 @@
                         selectedDays.splice(index, 1);
                         this.classList.remove('active');
                     }
-                    
+
                     document.getElementById('feedDays').value = selectedDays.join(',');
                 });
             });
-            
+
             // 投喂量选择
             document.querySelectorAll('.portion-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', function () {
                     document.querySelectorAll('.portion-btn').forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                     document.getElementById('portionSize').value = this.dataset.portion;
                 });
             });
-            
+
             // 保存计划
-            document.getElementById('saveScheduleBtn').addEventListener('click', function() {
+            document.getElementById('saveScheduleBtn').addEventListener('click', function () {
                 const form = document.getElementById('scheduleForm');
                 if (!form.checkValidity()) {
                     form.reportValidity();
@@ -248,76 +304,130 @@
                     feed_days: document.getElementById('feedDays').value,
                     portion_size: document.getElementById('portionSize').value
                 };
-                
+
                 if (currentScheduleId) {
                     formData.id = currentScheduleId;
                 }
-                
+
                 fetch('/api/feeding/schedules', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        // 获取模态框实例并隐藏
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('scheduleModal'));
-                        modal.hide();
-                        loadSchedules();
-                    } else {
-                        Salert('保存失败: ' + (data.message || '未知错误'));
-                    }
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // 获取模态框实例并隐藏
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('scheduleModal'));
+                            modal.hide();
+                            loadSchedules();
+                        } else {
+                            alert('保存失败: ' + (data.message || '未知错误'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('保存出错:', error);
+                        alert('保存出错: ' + error.message);
+                    });
             });
-            
+
             // 立即喂食
-            document.getElementById('feedNowBtn').addEventListener('click', function() {
+            document.getElementById('feedNowBtn').addEventListener('click', function () {
                 const portion = document.querySelector('.portion-btn.active').dataset.portion;
                 const btn = this;
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 喂食中...';
                 btn.disabled = true;
-                
+
                 fetch('/feed', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({portion_size: portion})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ portion_size: portion })
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        loadFeedingLogs();
-                    }
-                    btn.innerHTML = '<i class="fas fa-play"></i> 立即喂食';
-                    btn.disabled = false;
-                })
-                .catch(() => {
-                    btn.innerHTML = '<i class="fas fa-play"></i> 立即喂食';
-                    btn.disabled = false;
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            loadFeedingLogs();
+                        } else {
+                            showMessage('投喂失败: ' + (data.message || '未知错误'), 'danger');
+                        }
+                        btn.innerHTML = '<i class="fas fa-play"></i> 立即喂食';
+                        btn.disabled = false;
+                    })
+                    .catch(() => {
+                        btn.innerHTML = '<i class="fas fa-play"></i> 立即喂食';
+                        btn.disabled = false;
+                    });
+                ;
             });
         });
-        
+
+        function showMessage(message, type = 'info') {
+            // 确保消息容器存在
+            let alertBox = document.getElementById('messageAlert');
+            let messageText = document.getElementById('messageText');
+            
+            // 如果元素不存在，重新创建
+            if (!alertBox) {
+                alertBox = document.createElement('div');
+                alertBox.id = 'messageAlert';
+                alertBox.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-0 end-0 m-0 rounded-0`;
+                alertBox.style.zIndex = '9999';
+                
+                messageText = document.createElement('span');
+                messageText.id = 'messageText';
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'btn-close';
+                closeBtn.setAttribute('data-bs-dismiss', 'alert');
+                closeBtn.setAttribute('aria-label', 'Close');
+                
+                alertBox.appendChild(messageText);
+                alertBox.appendChild(closeBtn);
+                document.body.prepend(alertBox);
+            }
+            
+            // 更新消息内容和样式
+            messageText.textContent = message;
+            alertBox.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-0 end-0 m-0 rounded-0`;
+            alertBox.style.display = 'block';
+            
+            // 初始化Bootstrap Alert组件
+            const bsAlert = new bootstrap.Alert(alertBox);
+            
+            // 5秒后自动消失
+            setTimeout(() => {
+                bsAlert.close();
+            }, 5000);
+        }
+
+        // 关闭消息函数
+        function closeMessage() {
+            const alert = document.getElementById('messageAlert');
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+
         // 加载喂食计划
         function loadSchedules() {
             fetch('/api/feeding/schedules')
-            .then(response => response.json())
-            .then(schedules => {
-                const container = document.getElementById('schedulesList');
-                container.innerHTML = '';
-                
-                if (schedules.length === 0) {
-                    container.innerHTML = '<div class="text-center py-4 text-muted">暂无喂食计划</div>';
-                    return;
-                }
-                
-                schedules.forEach(schedule => {
-                    const daysMap = {0: '日', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六'};
-                    const daysText = schedule.feed_days.map(d => daysMap[d]).join('、');
-                    
-                    const card = document.createElement('div');
-                    card.className = `schedule-card card ${schedule.enabled ? '' : 'bg-light'}`;
-                    card.innerHTML = `
+                .then(response => response.json())
+                .then(schedules => {
+                    const container = document.getElementById('schedulesList');
+                    container.innerHTML = '';
+
+                    if (schedules.length === 0) {
+                        container.innerHTML = '<div class="text-center py-4 text-muted">暂无喂食计划</div>';
+                        return;
+                    }
+
+                    schedules.forEach(schedule => {
+                        const daysMap = { 0: '日', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六' };
+                        const daysText = schedule.feed_days.map(d => daysMap[d]).join('、');
+
+                        const card = document.createElement('div');
+                        card.className = `schedule-card card ${schedule.enabled ? '' : 'bg-light'}`;
+                        card.innerHTML = `
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h5 class="card-title mb-0">
@@ -325,8 +435,7 @@
                                     ${schedule.enabled ? '' : '<span class="badge bg-secondary ms-2">已禁用</span>'}
                                 </h5>
                                 <div class="form-check form-switch">
-                                    <input class="form-check-input schedule-toggle" type="checkbox" 
-                                        data-id="${schedule.id}" ${schedule.enabled ? 'checked' : ''}>
+                                    
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between text-muted mb-2">
@@ -342,99 +451,186 @@
                             </div>
                         </div>
                     `;
-                    container.appendChild(card);
-                });
-                
-                // 绑定编辑和删除事件
-                document.querySelectorAll('.edit-schedule').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        editSchedule(parseInt(this.dataset.id));
+                        container.appendChild(card);
+                    });
+
+                    // 绑定编辑和删除事件
+                    document.querySelectorAll('.edit-schedule').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            editSchedule(parseInt(this.dataset.id));
+                        });
+                    });
+
+                    document.querySelectorAll('.delete-schedule').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            if (confirm('确定要删除这个喂食计划吗？')) {
+                                deleteSchedule(parseInt(this.dataset.id));
+                            }
+                        });
+                    });
+
+                    // 绑定启用/禁用切换
+                    document.querySelectorAll('.schedule-toggle').forEach(toggle => {
+                        toggle.addEventListener('change', function () {
+                            const originalState = this.checked;
+                            this.checked = !originalState; // 先恢复原状态
+                            toggleSchedule(parseInt(this.dataset.id), originalState);
+                        });
                     });
                 });
-                
-                document.querySelectorAll('.delete-schedule').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        if (confirm('确定要删除这个喂食计划吗？')) {
-                            deleteSchedule(parseInt(this.dataset.id));
-                        }
-                    });
-                });
-                
-                // 绑定启用/禁用切换
-                document.querySelectorAll('.schedule-toggle').forEach(toggle => {
-                    toggle.addEventListener('change', function() {
-                        const originalState = this.checked;
-                        this.checked = !originalState; // 先恢复原状态
-                        toggleSchedule(parseInt(this.dataset.id), originalState);
-                    });
-                });
-            });
         }
-        
-        // 加载喂食记录
+
         function loadFeedingLogs() {
             fetch('/api/feeding/logs?limit=20')
-            .then(response => response.json())
-            .then(logs => {
-                const container = document.getElementById('feedingLogs');
-                document.getElementById('logsCount').textContent = `${logs.length}条`;
-                
-                if (logs.length === 0) {
-                    container.innerHTML = '<div class="text-center py-4 text-muted">暂无喂食记录</div>';
-                    return;
-                }
-                
-                container.innerHTML = '';
-                logs.forEach(log => {
-                    const date = new Date(log.feed_time * 1000);
-                    const timeStr = date.toLocaleString();
-                    
-                    const entry = document.createElement('div');
-                    entry.className = 'log-entry p-3 bg-light rounded';
-                    entry.innerHTML = `
-                        <div class="d-flex justify-content-between">
-                            <strong>${timeStr}</strong>
-                            <span class="badge bg-primary">${log.portion_size}次</span>
-                        </div>
-                        ${log.schedule_name ? `<div class="text-muted">计划: ${log.schedule_name}</div>` : ''}
-                    `;
-                    container.appendChild(entry);
+                .then(response => response.json())
+                .then(logs => {
+                    const container = document.getElementById('feedingLogs');
+                    document.getElementById('logsCount').textContent = `${logs.length}条`;
+
+                    if (logs.length === 0) {
+                        container.innerHTML = '<div class="text-center py-4 text-muted">暂无喂食记录</div>';
+                        return;
+                    }
+
+                    container.innerHTML = '';
+                    logs.forEach(log => {
+                        const date = new Date(log.feed_time * 1000);
+                        const timeStr = date.toLocaleString();
+
+                        const entry = document.createElement('div');
+                        entry.className = 'log-entry p-3 bg-light rounded mb-2 position-relative';
+                        entry.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <strong>${timeStr}</strong>
+                        ${log.schedule_name ? `<div class="text-muted small">计划: ${log.schedule_name}</div>` : ''}
+                    </div>
+                    <div>
+                        <span class="badge bg-primary">${log.portion_size}次</span>
+                        <button class="btn btn-sm btn-outline-danger delete-log-btn ms-2" data-id="${log.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+                        container.appendChild(entry);
+                    });
+
+                    // 绑定删除按钮事件
+                    document.querySelectorAll('.delete-log-btn').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            const logId = this.dataset.id;
+                            deleteFeedingLog(logId);
+                        });
+                    });
                 });
-            });
         }
-        
+
+        // 检测网络环境
+        function checkNetworkEnvironment() {
+            return fetch('/api/check_network')
+                .then(response => response.json())
+                .then(data => {
+                    isLocalNetwork = data.is_local;                    
+                    return isLocalNetwork;
+                })
+                .catch(error => {
+                    console.error('检查网络环境失败:', error);
+                    isLocalNetwork = false; // 默认不允许删除
+                    return false;
+                });
+        }
+
+
+        function deleteFeedingLog(logId) {
+            if (!isLocalNetwork) {
+                showMessage('删除功能仅限内网使用，请连接到本地网络后再试', 'warning');
+                return;
+            }
+
+            if (confirm('确定要删除这条喂食记录吗？此操作不可撤销！')) {
+                const deleteBtn = document.querySelector(`.delete-log-btn[data-id="${logId}"]`);
+                const originalHtml = deleteBtn.innerHTML;
+                deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                deleteBtn.disabled = true;
+
+                fetch(`/api/feeding/logs/${logId}`, {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'}
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.message || '删除失败');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    showMessage('喂食记录删除成功！', 'success');
+                    
+                    // 动画效果移除记录
+                    const logEntry = deleteBtn.closest('.log-entry');
+                    logEntry.style.transition = 'all 0.3s ease';
+                    logEntry.style.opacity = '0';
+                    logEntry.style.height = logEntry.offsetHeight + 'px';
+                    
+                    setTimeout(() => {
+                        logEntry.style.height = '0';
+                        logEntry.style.margin = '0';
+                        logEntry.style.padding = '0';
+                        
+                        setTimeout(() => {
+                            logEntry.remove();
+                            updateLogsCount();
+                        }, 300);
+                    }, 10);
+                })
+                .catch(error => {
+                    showMessage('删除失败: ' + error.message, 'danger');
+                    deleteBtn.innerHTML = originalHtml;
+                    deleteBtn.disabled = false;
+                });
+            }
+        }
+
+        function updateLogsCount() {
+            const count = document.querySelectorAll('.log-entry').length;
+            document.getElementById('logsCount').textContent = `${count}条`;
+        }
+
         // 编辑计划
         function editSchedule(id) {
             fetch('/api/feeding/schedules')
-            .then(response => response.json())
-            .then(schedules => {
-                const schedule = schedules.find(s => s.id === id);
-                if (schedule) {
-                    currentScheduleId = id;
-                    document.getElementById('modalTitle').textContent = '编辑喂食计划';
-                    document.getElementById('scheduleId').value = id;
-                    document.getElementById('scheduleName').value = schedule.schedule_name;
-                    document.getElementById('feedTime').value = schedule.feed_time;
-                    document.getElementById('scheduleEnabled').checked = schedule.enabled;
-                    
-                    // 设置星期选择
-                    selectedDays = schedule.feed_days.map(d => parseInt(d));
-                    updateDayButtons();
-                    document.getElementById('feedDays').value = selectedDays.join(',');
-                    
-                    // 设置投喂量
-                    document.querySelectorAll('.portion-btn').forEach(btn => {
-                        btn.classList.toggle('active', parseInt(btn.dataset.portion) === schedule.portion_size);
-                    });
-                    document.getElementById('portionSize').value = schedule.portion_size;
-                    
-                    // 显示模态框
-                    const scheduleModal = new bootstrap.Modal('#scheduleModal');
-                    scheduleModal.show();
-                }
-            });
+                .then(response => response.json())
+                .then(schedules => {
+                    const schedule = schedules.find(s => s.id === id);
+                    if (schedule) {
+                        currentScheduleId = id;
+                        document.getElementById('modalTitle').textContent = '编辑喂食计划';
+                        document.getElementById('scheduleId').value = id;
+                        document.getElementById('scheduleName').value = schedule.schedule_name;
+                        document.getElementById('feedTime').value = schedule.feed_time;
+                        document.getElementById('scheduleEnabled').checked = schedule.enabled;
+
+                        // 设置星期选择
+                        selectedDays = schedule.feed_days.map(d => parseInt(d));
+                        updateDayButtons();
+                        document.getElementById('feedDays').value = selectedDays.join(',');
+
+                        // 设置投喂量
+                        document.querySelectorAll('.portion-btn').forEach(btn => {
+                            btn.classList.toggle('active', parseInt(btn.dataset.portion) === schedule.portion_size);
+                        });
+                        document.getElementById('portionSize').value = schedule.portion_size;
+
+                        // 显示模态框
+                        const scheduleModal = new bootstrap.Modal('#scheduleModal');
+                        scheduleModal.show();
+                    }
+                });
         }
-        
+
         // 更新星期选择按钮状态
         function updateDayButtons() {
             document.querySelectorAll('.day-btn').forEach(btn => {
@@ -442,87 +638,88 @@
                 btn.classList.toggle('active', selectedDays.includes(day));
             });
         }
-        
+
         // 删除计划
         function deleteSchedule(id) {
             fetch(`/api/feeding/schedules/${id}`, {
                 method: 'DELETE',
-                headers: {'Content-Type': 'application/json'}
+                headers: { 'Content-Type': 'application/json' }
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.message || '删除失败');
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.status === 'success') {
-                    loadSchedules();
-                }
-            })
-            .catch(error => {
-                alert('删除失败: ' + error.message);
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.message || '删除失败');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        loadSchedules();
+                    }
+                })
+                .catch(error => {
+                    alert('删除失败: ' + error.message);
+                });
         }
-        
+
         // 切换计划状态
         // 替换原有的toggleSchedule函数
-function toggleSchedule(id, enabled) {
-    const toggle = document.querySelector(`.schedule-toggle[data-id="${id}"]`);
-    const card = toggle.closest('.schedule-card');
-    
-    // 立即更新UI反馈
-    toggle.disabled = true;
-    if (enabled) {
-        card.classList.remove('bg-light');
-    } else {
-        card.classList.add('bg-light');
-    }
-    
-    fetch('/api/feeding/schedules/toggle', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            id: id,
-            enabled: enabled
-        })
-    })
-    .then(response => {
-        if (!response.ok) throw new Error('HTTP错误');
-        return response.json();
-    })
-    .then(data => {
-        if (data.status !== 'success') {
-            throw new Error(data.message || '操作失败');
-        }
-        // 更新状态标签
-        const badge = card.querySelector('.badge');
-        if (enabled) {
-            if (badge) badge.remove();
-        } else {
-            if (!badge) {
-                const title = card.querySelector('.card-title');
-                title.insertAdjacentHTML('beforeend', 
-                    '<span class="badge bg-secondary ms-2">已禁用</span>');
+        function toggleSchedule(id, enabled) {
+            const toggle = document.querySelector(`.schedule-toggle[data-id="${id}"]`);
+            const card = toggle.closest('.schedule-card');
+
+            // 立即更新UI反馈
+            toggle.disabled = true;
+            if (enabled) {
+                card.classList.remove('bg-light');
+            } else {
+                card.classList.add('bg-light');
             }
+
+            fetch('/api/feeding/schedules/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: id,
+                    enabled: enabled
+                })
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP错误');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status !== 'success') {
+                        throw new Error(data.message || '操作失败');
+                    }
+                    // 更新状态标签
+                    const badge = card.querySelector('.badge');
+                    if (enabled) {
+                        if (badge) badge.remove();
+                    } else {
+                        if (!badge) {
+                            const title = card.querySelector('.card-title');
+                            title.insertAdjacentHTML('beforeend',
+                                '<span class="badge bg-secondary ms-2">已禁用</span>');
+                        }
+                    }
+                })
+                .catch(error => {
+                    // 恢复原始状态
+                    toggle.checked = !enabled;
+                    if (enabled) {
+                        card.classList.add('bg-light');
+                    } else {
+                        card.classList.remove('bg-light');
+                    }
+                    alert('操作失败: ' + error.message);
+                })
+                .finally(() => {
+                    toggle.disabled = false;
+                });
         }
-    })
-    .catch(error => {
-        // 恢复原始状态
-        toggle.checked = !enabled;
-        if (enabled) {
-            card.classList.add('bg-light');
-        } else {
-            card.classList.remove('bg-light');
-        }
-        alert('操作失败: ' + error.message);
-    })
-    .finally(() => {
-        toggle.disabled = false;
-    });
-}
     </script>
 </body>
+
 </html>
