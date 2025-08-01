@@ -1,0 +1,12 @@
+{
+    "dht11_pin": 5,
+    "database_path": "/var/lib/fishtank/sensor_data.db",
+    "timezone": "Asia/Shanghai",
+    "top_sensor_pin": 25,
+    "bottom_sensor_pin": 23,
+    "email_sender": "my@qiwen.cn",
+    "email_password": "########",
+    "email_receiver": "7740840@qq.com",
+    "smtp_server": "smtp.qiye.aliyun.com",
+    "smtp_port": 465
+}
