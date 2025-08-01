@@ -2,9 +2,9 @@
     "led_count": 10,
     "led_brightness": 230,
     "active_color": [
-        237,
-        25,
-        14
+        33,
+        145,
+        237
     ],
     "idle_color": [
         0,
@@ -20,5 +20,6 @@
     "pump_enabled": false,
     "water_sensor_top_pin": 25,
     "water_sensor_bottom_pin": 23,
-    "dht11_pin": 5
+    "dht11_pin": 5,
+    "database_path": "/var/lib/fishtank/sensor_data.db"
 }
