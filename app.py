@@ -1,3 +1,16 @@
+'''
+
+pip install Adafruit-DHT
+执行程序用 sudo python app.py
+水位的监控报警发邮件到7740840@qq.com,单独运行 python shui.py
+
+sudo python fishtank.py
+包含水温、室温、湿度记录、水位的监控异常发邮件
+
+V1.1 新增投喂按钮，投喂间隔2小时，投喂后会记录日志，调用舵机进行投喂
+V1.2 新增喂食计划管理，支持多计划设置，自动喂食
+'''
+
 import os
 import json
 import time
@@ -11,6 +24,9 @@ from rpi_ws281x import PixelStrip, Color
 import RPi.GPIO as GPIO
 import glob
 import Adafruit_DHT
+from datetime import datetime, timedelta
+import sqlite3
+import atexit
 
 # 配置日志
 logging.basicConfig(
@@ -83,7 +99,9 @@ def create_default_config():
         "pump_pin": 22,  # 气泵引脚 (GPIO22)
         "pump_enabled": False,  # 气泵状态
         "water_sensor_top_pin": 25,
-        "water_sensor_bottom_pin": 23
+        "water_sensor_bottom_pin": 23,
+        "dht11_pin": 5,
+        "database_path": "/var/lib/fishtank/sensor_data.db"
     }
     try:
         with open(CONFIG_PATH, 'w') as f:
@@ -102,10 +120,20 @@ lock = threading.Lock()
 fan_enabled = False  # 风扇状态
 pump_enabled = False  # 气泵状态
 water_level = "unknown"  # 水位状态：high/normal/low/unknown
-# 在全局变量部分添加
 dht_sensor = Adafruit_DHT.DHT11
-current_temp = None
-current_humidity = None
+current_temp = None #室温
+current_humidity = None #湿度
+current_water_temp = None #鱼缸水温
+
+last_feed_time = 0  # 记录上次投喂时间（时间戳）
+feed_lock = threading.Lock()  # 投喂操作锁
+
+# 在全局配置中添加数据库路径
+config.setdefault('database_path', '/var/lib/fishtank/sensor_data.db')
+
+# 确保数据库目录存在
+database_dir = os.path.dirname(config.get('database_path'))
+os.makedirs(database_dir, exist_ok=True)
 
 # 创建 Flask 应用
 app = Flask(__name__, 
@@ -137,15 +165,25 @@ def init_gpio():
         GPIO.setup(config['water_sensor_top_pin'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(config['water_sensor_bottom_pin'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-        
-
         logger.info("GPIO初始化成功")
         return True
     except Exception as e:
         logger.error(f"GPIO初始化失败: {str(e)}")
         return False
-    
-# 添加水温读取函数
+
+def init_servo():
+    """初始化舵机"""
+    try:
+        from sg90180 import SG90Servo
+        global servo
+        servo = SG90Servo(gpio_pin=26)
+        logger.info("舵机初始化成功")
+        return True
+    except Exception as e:
+        logger.error(f"舵机初始化失败: {str(e)}")
+        return False    
+
+# 水温读取函数
 def get_water_temp():
     """读取DS18B20水温传感器"""
     try:
@@ -375,6 +413,38 @@ def get_memory_usage():
     except:
         return None
 
+
+def sensor_reading_task():
+    """每30秒读取一次传感器数据的任务"""
+    global current_temp, current_humidity, current_water_temp
+    logger.info("启动传感器读取任务...")
+    
+    while True:
+        try:
+            # 读取室温湿度
+            humidity, temperature = Adafruit_DHT.read_retry(dht_sensor, config['dht11_pin'])
+            if humidity is not None and temperature is not None:
+                current_temp = temperature
+                current_humidity = humidity
+                logger.info(f"温湿度读取成功: {temperature}°C, {humidity}%")
+            else:
+                logger.warning("读取温湿度失败")
+            
+            # 读取水温
+            water_temp = get_water_temp()
+            if water_temp is not None:
+                current_water_temp = water_temp
+                logger.info(f"水温读取成功: {water_temp}°C")
+            else:
+                logger.warning("读取水温失败")
+                
+        except Exception as e:
+            logger.error(f"读取传感器数据时出错: {str(e)}")
+        
+        # 每10秒读取一次
+        time.sleep(30)
+
+
 # ======================
 # Flask 路由
 # ======================
@@ -390,7 +460,8 @@ def index():
 def status():
     """系统状态API"""
     check_water_level()  # 每次请求时检测水位
-    read_dht11()        # 读取温湿度
+    #read_dht11()        # 读取温湿度
+    feed_hours_ago = (time.time() - last_feed_time) / 3600.0 if last_feed_time > 0 else None
     with lock:
         return jsonify({
             "active": is_active,
@@ -398,12 +469,13 @@ def status():
             "last_activity": last_activity_time,
             "cpu_temp": get_cpu_temp(),
             "mem_usage": get_memory_usage(),
-            #"water_temp": get_water_temp(),  # 添加水温
+            "water_temp": current_water_temp,  # 水温
             "fan_enabled": fan_enabled,  # 风扇状态
             "pump_enabled": pump_enabled,  # 气泵状态
             "water_level": water_level,  # 水位状态
-            "temperature": current_temp,    # 添加温度
-            "humidity": current_humidity    # 添加湿度
+            "temperature": current_temp,    # # 使用后台线程更新的温度
+            "humidity": current_humidity,    # 使用后台线程更新的湿度
+            "feed_hours_ago": feed_hours_ago
         })
 
 # 添加风扇控制路由
@@ -419,9 +491,9 @@ def control_fan(state):
     else:
         return jsonify({"status": "error", "message": "无效的指令"}), 400
 
+# 获取配置路由 - 添加颜色格式兼容处理
 @app.route('/get_config')
 def get_config():
-    """获取当前配置（确保格式正确）"""
     # 确保颜色是对象格式，便于前端处理
     safe_config = config.copy()
     safe_config['active_color'] = {
@@ -585,26 +657,444 @@ def control_pump(state):
         return jsonify({"status": "error", "message": "无效的指令"}), 400
 
 
+
+@app.route('/charts')
+def charts():
+    """数据统计页面"""
+    return render_template('charts.html', 
+                           ip=get_local_ip(), 
+                           port=5000)
+
+# 喂食计划管理API
+@app.route('/api/feeding/schedules', methods=['GET', 'POST', 'DELETE'])
+def manage_schedules():
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 确保表存在
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS feeding_schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                enabled INTEGER DEFAULT 1,
+                schedule_name TEXT NOT NULL,
+                feed_time TEXT NOT NULL,
+                feed_days TEXT NOT NULL,
+                portion_size INTEGER DEFAULT 1,
+                last_feed_time INTEGER,
+                next_feed_time INTEGER
+            )
+        ''')
+        
+        if request.method == 'GET':
+            # 获取所有喂食计划
+            c.execute('SELECT id, enabled, schedule_name, feed_time, feed_days, portion_size FROM feeding_schedules ORDER BY feed_time')
+            schedules = []
+            for row in c.fetchall():
+                schedules.append({
+                    'id': row[0],
+                    'enabled': bool(row[1]),
+                    'schedule_name': row[2],
+                    'feed_time': row[3],
+                    'feed_days': [int(d) for d in row[4].split(',') if d],
+                    'portion_size': row[5]
+                })
+            return jsonify(schedules)
+        
+        elif request.method == 'POST':
+            data = request.get_json()
+            if not data:
+                return jsonify({"status": "error", "message": "无效的请求数据"}), 400
+            
+            # 验证必要字段
+            required_fields = ['schedule_name', 'feed_time', 'feed_days', 'portion_size']
+            if not all(field in data for field in required_fields):
+                return jsonify({"status": "error", "message": "缺少必要字段"}), 400
+            
+            # 处理feed_days格式
+            feed_days = data['feed_days']
+            if isinstance(feed_days, list):
+                feed_days = ','.join(str(day) for day in feed_days)
+            
+            if 'id' in data:
+                # 更新现有计划
+                c.execute('''
+                    UPDATE feeding_schedules SET
+                    enabled=?, schedule_name=?, feed_time=?, feed_days=?, portion_size=?
+                    WHERE id=?
+                ''', (
+                    int(data.get('enabled', True)),
+                    data['schedule_name'],
+                    data['feed_time'],
+                    feed_days,
+                    int(data['portion_size']),
+                    data['id']
+                ))
+                schedule_id = data['id']
+            else:
+                # 创建新计划
+                c.execute('''
+                    INSERT INTO feeding_schedules 
+                    (enabled, schedule_name, feed_time, feed_days, portion_size)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    int(data.get('enabled', True)),
+                    data['schedule_name'],
+                    data['feed_time'],
+                    feed_days,
+                    int(data['portion_size'])
+                ))
+                schedule_id = c.lastrowid
+            
+            conn.commit()
+            return jsonify({'status': 'success', 'id': schedule_id})
+    
+    except Exception as e:
+        logger.error(f"喂食计划管理错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/feeding/schedules/toggle', methods=['POST'])
+def toggle_schedule():
+    try:
+        data = request.get_json()
+        schedule_id = data.get('id')
+        enabled = data.get('enabled', 0)
+        
+        if not schedule_id:
+            return jsonify({"status": "error", "message": "缺少计划ID"}), 400
+        
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        c.execute('''
+            UPDATE feeding_schedules 
+            SET enabled = ?
+            WHERE id = ?
+        ''', (enabled, schedule_id))
+        
+        if c.rowcount == 0:
+            return jsonify({"status": "error", "message": "计划不存在"}), 404
+        
+        conn.commit()
+        return jsonify({"status": "success", "id": schedule_id, "enabled": enabled})
+    
+    except Exception as e:
+        logger.error(f"切换计划状态失败: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+#手动喂食
+@app.route('/feed', methods=['POST'])
+def feed_fish():
+    """立即投喂接口（带完整错误处理）"""
+    global last_feed_time
+    
+    try:
+        # 1. 验证请求数据
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "无效的请求数据"}), 400
+        
+        # 2. 获取并验证投喂量
+        try:
+            portion_size = int(data.get('portion_size', 1))
+            portion_size = max(1, min(portion_size, 3))  # 限制1-3次
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "投喂量必须是1-3的整数"}), 400
+
+        # 3. 检查舵机状态
+        if 'servo' not in globals():
+            if not init_servo():
+                return jsonify({"status": "error", "message": "舵机初始化失败"}), 500
+
+        # 4. 检查冷却时间（带容错处理）
+        current_time = time.time()
+        if last_feed_time > 0 and (current_time - last_feed_time) < 2 * 3600:
+            remaining = (2 * 3600 - (current_time - last_feed_time)) / 60
+            return jsonify({
+                "status": "error",
+                "message": f"距离上次投喂不足2小时，请{remaining:.1f}分钟后再试"
+            }), 429
+
+        # 5. 执行投喂（带线程锁）
+        with feed_lock:
+            # 执行投喂动作
+            for _ in range(portion_size):
+                try:
+                    servo.touwei()
+                    time.sleep(1)  # 每次投喂间隔1秒
+                except Exception as e:
+                    logger.error(f"投喂动作执行失败: {str(e)}")
+                    return jsonify({
+                        "status": "error", 
+                        "message": f"投喂动作执行失败: {str(e)}"
+                    }), 500
+
+            # 6. 记录投喂日志
+            conn = None
+            try:
+                conn = sqlite3.connect(config['database_path'])
+                c = conn.cursor()
+                c.execute('''
+                    INSERT INTO feeding_logs 
+                    (feed_time, portion_size)
+                    VALUES (?, ?)
+                ''', (int(current_time), portion_size))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"记录投喂日志失败: {str(e)}")
+                if conn:
+                    conn.rollback()
+                return jsonify({
+                    "status": "error",
+                    "message": "记录投喂日志失败"
+                }), 500
+            finally:
+                if conn:
+                    conn.close()
+
+            # 7. 更新最后投喂时间
+            last_feed_time = current_time
+            
+            return jsonify({
+                "status": "success",
+                "message": f"成功投喂{portion_size}次",
+                "last_feed_time": last_feed_time
+            })
+
+    except Exception as e:
+        logger.error(f"投喂处理严重错误: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            "status": "error",
+            "message": "服务器内部错误"
+        }), 500
+
+#删除喂食计划
+@app.route('/api/feeding/schedules/<int:schedule_id>', methods=['DELETE'])
+def delete_schedule(schedule_id):
+    
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 先检查计划是否存在
+        c.execute('SELECT id FROM feeding_schedules WHERE id = ?', (schedule_id,))
+        if not c.fetchone():
+            return jsonify({"status": "error", "message": "计划不存在"}), 404
+        
+        # 删除计划
+        c.execute('DELETE FROM feeding_schedules WHERE id = ?', (schedule_id,))
+        conn.commit()
+        
+        logger.info(f"成功删除喂食计划: ID {schedule_id}")
+        return jsonify({"status": "success", "id": schedule_id})
+    
+    except sqlite3.Error as e:
+        logger.error(f"数据库错误: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+        return jsonify({"status": "error", "message": "数据库错误"}), 500
+    except Exception as e:
+        logger.error(f"删除计划失败: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+# 获取喂食记录
+@app.route('/api/feeding/logs', methods=['GET'])
+def get_feeding_logs():
+    limit = request.args.get('limit', 50)
+    conn = sqlite3.connect(config['database_path'])
+    c = conn.cursor()
+    
+    c.execute('''
+        SELECT l.id, l.feed_time, l.portion_size, 
+               s.schedule_name, s.id as schedule_id
+        FROM feeding_logs l
+        LEFT JOIN feeding_schedules s ON l.schedule_id = s.id
+        ORDER BY l.feed_time DESC
+        LIMIT ?
+    ''', (limit,))
+    
+    logs = []
+    for row in c.fetchall():
+        logs.append({
+            'id': row[0],
+            'feed_time': row[1],
+            'portion_size': row[2],
+            'schedule_name': row[3],
+            'schedule_id': row[4]
+        })
+    
+    return jsonify(logs)
+
+
+# 定时任务检查
+def check_feeding_schedules():
+    while True:
+        try:
+            conn = sqlite3.connect(config['database_path'])
+            c = conn.cursor()
+            
+            now = datetime.now()
+            current_time = now.strftime('%H:%M')
+            current_weekday = str(now.weekday())
+            
+            # 获取所有启用的计划
+            c.execute('''
+                SELECT id, portion_size, last_feed_time 
+                FROM feeding_schedules
+                WHERE enabled=1 AND feed_time=? AND feed_days LIKE ?
+            ''', (current_time, f'%{current_weekday}%'))
+            
+            for schedule in c.fetchall():
+                schedule_id, portion_size, last_feed_time = schedule
+                current_timestamp = time.time()
+                
+                # 检查冷却时间（至少2小时）
+                if last_feed_time and (current_timestamp - last_feed_time) < 7200:
+                    logger.info(f"计划 {schedule_id} 冷却中，跳过执行")
+                    continue
+                
+                try:
+                    # 执行喂食
+                    for _ in range(portion_size):
+                        if 'servo' in globals():
+                            servo.touwei()
+                        time.sleep(2)
+                    
+                    # 更新最后喂食时间
+                    c.execute('''
+                        UPDATE feeding_schedules
+                        SET last_feed_time=?
+                        WHERE id=?
+                    ''', (int(current_timestamp), schedule_id))
+                    
+                    # 记录喂食日志
+                    c.execute('''
+                        INSERT INTO feeding_logs 
+                        (schedule_id, feed_time, portion_size)
+                        VALUES (?, ?, ?)
+                    ''', (schedule_id, int(current_timestamp), portion_size))
+                    
+                    conn.commit()
+                    logger.info(f"自动喂食完成: 计划ID {schedule_id}")
+                    
+                except Exception as e:
+                    logger.error(f"自动喂食失败: {str(e)}")
+                    conn.rollback()
+        
+        except Exception as e:
+            logger.error(f"检查喂食计划失败: {str(e)}")
+        
+        finally:
+            if 'conn' in locals():
+                conn.close()
+        
+        time.sleep(60)  # 每分钟检查一次
+
+
+@app.route('/feeding')
+def feeding():
+    """喂食管理页面"""
+    return render_template('feeding.html', 
+                         ip=get_local_ip(), 
+                         port=5000)
+
+@app.route('/sensor_data')
+def get_sensor_data():
+    """获取传感器历史数据"""
+    time_range = request.args.get('range', 'day')  # day, week, month
+    
+    # 计算时间范围
+    now = datetime.now()
+    if time_range == 'day':
+        start_time = now - timedelta(days=1)
+    elif time_range == 'week':
+        start_time = now - timedelta(weeks=1)
+    elif time_range == 'month':
+        start_time = now - timedelta(days=30)
+    else:
+        start_time = now - timedelta(days=1)
+    
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 查询数据
+        c.execute('''
+            SELECT strftime('%Y-%m-%d %H:%M', timestamp) as time,
+                   air_temp, humidity, water_temp
+            FROM sensor_data
+            WHERE timestamp >= ?
+            ORDER BY timestamp
+        ''', (start_time.strftime('%Y-%m-%d %H:%M:%S'),))
+        
+        data = c.fetchall()
+        conn.close()
+        
+        # 格式化数据
+        times = [row[0] for row in data]
+        air_temps = [row[1] for row in data]
+        humidities = [row[2] for row in data]
+        water_temps = [row[3] for row in data]
+        
+        return jsonify({
+            "times": times,
+            "air_temps": air_temps,
+            "humidities": humidities,
+            "water_temps": water_temps
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 # ======================
 # 主程序
 # ======================
 
 def main():
     """程序入口"""
-    logger.info("====== 启动鱼缸监控控制系统V0.5 ======")
+    logger.info("====== 启动鱼缸监控控制系统V1.1 ======")
     
     # 初始化硬件
     init_gpio()
     init_led_strip()
     # 首次读取温湿度
-    read_dht11()
+    #read_dht11()
+    # 初始化舵机
+    init_servo()
+     # 注册退出清理函数
+    atexit.register(cleanup_resources)
+
+
+    # 启动传感器读取线程
+    sensor_thread = threading.Thread(target=sensor_reading_task, daemon=True)
+    sensor_thread.start()
     
     # 启动监控线程
     monitor_thread = threading.Thread(target=monitor_motion_connections, daemon=True)
     monitor_thread.start()
+
+    # 启动喂食计划检查线程
+    threading.Thread(target=check_feeding_schedules, daemon=True).start()
     
     # 启动Web服务
     app.run(host='0.0.0.0', port=5000, threaded=True)
+
+def cleanup_resources():
+    """清理资源"""
+    if 'servo' in globals():
+        try:
+            servo.cleanup()
+            logger.info("舵机资源已清理")
+        except:
+            pass
 
 if __name__ == '__main__':
     try:
@@ -618,6 +1108,5 @@ if __name__ == '__main__':
         GPIO.cleanup()
 
 
-#pip install Adafruit-DHT
-#执行程序用 sudo python app.py
-#水位的监控报警发邮件到7740840@qq.com,单独运行 python shui.py
+
+        
