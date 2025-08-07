@@ -355,22 +355,22 @@
                     </h1>
 
                     <!-- 修改直播容器部分 -->
-<div class="row mb-4 mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-video"></i> 鱼缸实时直播
-                <span id="networkBadge" class="badge bg-success ms-2">内网模式</span>
-            </div>
-            <div class="card-body p-0">
-                <div id="liveContainer" 
-                     style="background-color: hsl(0, 0%, 25%);">
-                    <img id="liveImage" class="img-fluid w-100" style="display: block;">
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+                    <div class="row mb-4 mt-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-video"></i> 鱼缸实时直播
+                                    <span id="networkBadge" class="badge bg-success ms-2">内网模式</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="liveContainer" 
+                                        style="background-color: hsl(0, 0%, 25%);">
+                                        <img id="liveImage" class="img-fluid w-100" style="display: block;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="status-container">
                         <!-- 添加水温状态块 -->
@@ -852,9 +852,7 @@
             // 检查是否是内网IP
             const isLocalNetwork = window.location.hostname === 'localhost' || 
                                 window.location.hostname === '127.0.0.1' || 
-                                window.location.hostname.startsWith('192.168') ||
-                                window.location.hostname.startsWith('172.') ||
-                                window.location.hostname.startsWith('10.');
+                                window.location.hostname.startsWith('192.168');
             
             if (isLocalNetwork) {
                 // 内网使用树莓派直连地址
@@ -899,8 +897,8 @@
                     idleColorPicker.color.rgb = config.idle_color;
                 });
             
-            // 每2秒更新一次状态
-            setInterval(updateStatus, 2000);
+            // 每5秒更新一次状态
+            setInterval(updateStatus, 5000);
             updateStatus();
 
             // 检测网络环境并设置直播源
@@ -908,9 +906,7 @@
             
             // 每10秒更新一次系统信息
             setInterval(updateStatus, 20000);
-        }
-
-        
+        }       
         
         
         // 页面加载完成后初始化
