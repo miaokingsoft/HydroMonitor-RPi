@@ -426,7 +426,7 @@ def sensor_reading_task():
             if humidity is not None and temperature is not None:
                 current_temp = temperature
                 current_humidity = humidity
-                logger.info(f"温湿度读取成功: {temperature}°C, {humidity}%")
+                #logger.info(f"温湿度读取成功: {temperature}°C, {humidity}%")
             else:
                 logger.warning("读取温湿度失败")
             
@@ -434,7 +434,7 @@ def sensor_reading_task():
             water_temp = get_water_temp()
             if water_temp is not None:
                 current_water_temp = water_temp
-                logger.info(f"水温读取成功: {water_temp}°C")
+                #logger.info(f"水温读取成功: {water_temp}°C")
             else:
                 logger.warning("读取水温失败")
                 
@@ -444,6 +444,103 @@ def sensor_reading_task():
         # 每10秒读取一次
         time.sleep(30)
 
+# 定时任务检查
+def check_feeding_schedules():
+    """检查并执行喂食计划的定时任务"""
+    while True:
+        logger.info(f"定时喂食任务检查！")
+        conn = None
+        try:
+            conn = sqlite3.connect(config['database_path'])
+            c = conn.cursor()
+            
+            # 确保所有需要的表都存在
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS feeding_schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    enabled INTEGER DEFAULT 1,
+                    schedule_name TEXT NOT NULL,
+                    feed_time TEXT NOT NULL,  -- 存储格式 HH:MM
+                    feed_days TEXT NOT NULL,  -- 存储格式 0,1,2,3,4,5,6 (0=周日)
+                    portion_size INTEGER DEFAULT 1,
+                    last_feed_time INTEGER   -- 存储时间戳
+                )
+            ''')
+            
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS feeding_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    schedule_id INTEGER,
+                    feed_time INTEGER NOT NULL,
+                    portion_size INTEGER NOT NULL,
+                    FOREIGN KEY(schedule_id) REFERENCES feeding_schedules(id)
+                )
+            ''')
+            
+            now = datetime.now()
+            current_time = now.strftime('%H:%M')
+            current_weekday = str((now.weekday() + 1) % 7)  # 转换为 0=周日, 1=周一, ..., 6=周六  # 0=周日, 6=周六
+            logger.info(f"当前时间: {current_time}, 当前星期: {current_weekday}")  # 新增日志
+            
+            # 获取所有启用的计划
+            c.execute('''
+                SELECT id, portion_size, last_feed_time 
+                FROM feeding_schedules
+                WHERE enabled=1 AND feed_time=? AND feed_days LIKE ?
+            ''', (current_time, f'%{current_weekday}%'))
+            
+            for schedule in c.fetchall():
+                print(schedule)
+                schedule_id, portion_size, last_feed_time_ = schedule
+                current_timestamp = int(time.time())
+
+                #last_feed_time_ 为该计划的最后喂食时间 ，last_feed_time为全局变量喂食时间 测试时请注意！
+                
+                # 检查冷却时间（至少3小时），如果从未喂食则last_feed_time_为None
+                if last_feed_time_ is None or (current_timestamp - last_feed_time) >= 10800:
+                    logger.info(f"执行喂食计划 {schedule_id}，投喂量 {portion_size}")
+                    
+                    try:
+                        # 执行喂食
+                        if 'servo' in globals():
+                            for _ in range(portion_size):
+                                servo.touwei()
+                                time.sleep(2)  # 每次投喂间隔2秒
+                        
+                        # 更新最后喂食时间
+                        c.execute('''
+                            UPDATE feeding_schedules
+                            SET last_feed_time=?
+                            WHERE id=?
+                        ''', (current_timestamp, schedule_id))
+                        
+                        # 记录喂食日志
+                        c.execute('''
+                            INSERT INTO feeding_logs 
+                            (schedule_id, feed_time, portion_size)
+                            VALUES (?, ?, ?)
+                        ''', (schedule_id, current_timestamp, portion_size))
+                        
+                        conn.commit()
+                        logger.info(f"自动喂食完成: 计划ID {schedule_id}")
+                        
+                    except Exception as e:
+                        logger.error(f"自动喂食失败: {str(e)}")
+                        conn.rollback()
+                else:
+                   print("最后的投喂时间不符合要求！")
+                   logger.info(f"执行喂食计划 {schedule_id}，时间差 {current_timestamp - last_feed_time}") 
+        
+        except Exception as e:
+            logger.error(f"检查喂食计划失败: {str(e)}")
+            if conn:
+                conn.rollback()
+        
+        finally:
+            if conn:
+                conn.close()
+        
+        time.sleep(60)  # 每分钟检查一次
 
 # ======================
 # Flask 路由
@@ -936,69 +1033,6 @@ def get_feeding_logs():
 
 
 
-# 定时任务检查
-def check_feeding_schedules():
-    while True:
-        try:
-            conn = sqlite3.connect(config['database_path'])
-            c = conn.cursor()
-            
-            now = datetime.now()
-            current_time = now.strftime('%H:%M')
-            current_weekday = str(now.weekday())
-            
-            # 获取所有启用的计划
-            c.execute('''
-                SELECT id, portion_size, last_feed_time 
-                FROM feeding_schedules
-                WHERE enabled=1 AND feed_time=? AND feed_days LIKE ?
-            ''', (current_time, f'%{current_weekday}%'))
-            
-            for schedule in c.fetchall():
-                schedule_id, portion_size, last_feed_time = schedule
-                current_timestamp = time.time()
-                
-                # 检查冷却时间（至少2小时）
-                if last_feed_time and (current_timestamp - last_feed_time) < 7200:
-                    logger.info(f"计划 {schedule_id} 冷却中，跳过执行")
-                    continue
-                
-                try:
-                    # 执行喂食
-                    for _ in range(portion_size):
-                        if 'servo' in globals():
-                            servo.touwei()
-                        time.sleep(2)
-                    
-                    # 更新最后喂食时间
-                    c.execute('''
-                        UPDATE feeding_schedules
-                        SET last_feed_time=?
-                        WHERE id=?
-                    ''', (int(current_timestamp), schedule_id))
-                    
-                    # 记录喂食日志
-                    c.execute('''
-                        INSERT INTO feeding_logs 
-                        (schedule_id, feed_time, portion_size)
-                        VALUES (?, ?, ?)
-                    ''', (schedule_id, int(current_timestamp), portion_size))
-                    
-                    conn.commit()
-                    logger.info(f"自动喂食完成: 计划ID {schedule_id}")
-                    
-                except Exception as e:
-                    logger.error(f"自动喂食失败: {str(e)}")
-                    conn.rollback()
-        
-        except Exception as e:
-            logger.error(f"检查喂食计划失败: {str(e)}")
-        
-        finally:
-            if 'conn' in locals():
-                conn.close()
-        
-        time.sleep(60)  # 每分钟检查一次
 
 
 @app.route('/api/feeding/logs/<int:log_id>', methods=['DELETE'])
@@ -1097,7 +1131,7 @@ def check_network():
 
 def main():
     """程序入口"""
-    logger.info("====== 启动鱼缸监控控制系统V1.1 ======")
+    logger.info("====== 启动鱼缸监控控制系统V1.2 ======")
     
     # 初始化硬件
     init_gpio()
@@ -1119,7 +1153,9 @@ def main():
     monitor_thread.start()
 
     # 启动喂食计划检查线程
-    threading.Thread(target=check_feeding_schedules, daemon=True).start()
+    # 启动喂食计划检查线程
+    feeding_thread = threading.Thread(target=check_feeding_schedules, daemon=True)
+    feeding_thread.start()
     
     # 启动Web服务
     app.run(host='0.0.0.0', port=5000, threaded=True)
