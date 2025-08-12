@@ -1,5 +1,5 @@
 # HydroMonitor-RPi 
-# 鱼缸监控系统v1.2
+# 闲沐智能鱼缸系统v1.2
 
 基于树莓派的智能鱼缸监控系统，使用 Flask 构建 Web 界面，支持以下功能：
 
@@ -41,8 +41,8 @@
 (待更新...)
 
 ## 3D打印件
-风扇支架 https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928
-自动喂食器 （整理中）
+- 风扇支架 https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928
+- 自动喂食器 （整理中）
 
 ## 软件依赖
 - Python 3.7+
@@ -83,7 +83,6 @@ sudo python fishtank.py
 ```markdown
 ├── app.py               # 主程序
 ├── config.json          # 配置文件
-├── config_fishtank.json          # 水温、水位、湿度、室温实时监控配置文件
 ├── fishtank.py          # 水温、水位、湿度、室温采集执行程序
 ├── opendb.py          # 数据库初始化程序
 ├── sg90180.py         # 舵机控制库，用于喂食时控制舵机
