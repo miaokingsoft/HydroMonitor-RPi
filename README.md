@@ -37,11 +37,12 @@
 - 5V 3A电源（给风扇、气泵供电）
 - PCB 洞洞板、线等等耗材（谁能帮我画PCB板呀将全部模块集成到一个小板上，求助大神）
 - 
-## 硬件接线图
-(待更新...)
+## 硬件接线板
+如有需要 [点击这里](https://www.goofish.com/item?spm=a21ybx.personal.feeds.1.596b2358xB7LkT&id=965639435219&categoryId=125952002) 请访问  
+
 
 ## 3D打印件
-- 风扇支架 https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928
+- [风扇支架](https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928)
 - 自动喂食器 （整理中）
 
 ## 软件依赖
