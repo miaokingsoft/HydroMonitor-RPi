@@ -38,7 +38,7 @@
 - PCB 洞洞板、线等等耗材（谁能帮我画PCB板呀将全部模块集成到一个小板上，求助大神）
 - 
 ## 硬件接线板
-!(智能鱼缸接线板)(https://img.alicdn.com/bao/uploaded/i1/O1CN01SVvET52HMnw9oyIbw_!!4611686018427384401-0-fleamarket.jpg_Q90.jpg)
+![智能鱼缸接线板](/PCB.jpg)
 
 如有需要 [点击这里](https://www.goofish.com/item?spm=a21ybx.personal.feeds.1.596b2358xB7LkT&id=965639435219&categoryId=125952002) 请访问  
 
