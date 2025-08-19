@@ -59,6 +59,25 @@
 - [风扇支架](https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928)
 - 自动喂食器 （整理中）
 
+## 在树莓派上安装 Motion
+```markdown
+sudo apt update
+sudo apt install motion
+```
+- 注意： Raspbian 仓库中的版本可能不是最新的。如果需要最新特性或 bug 修复，可以从源代码编译安装（过程稍复杂，需查阅官方文档）。
+- 主配置文件： /etc/motion/motion.conf 这是全局配置文件，修改它需要 root 权限 (sudo nano /etc/motion/motion.conf)。
+- 修改后重启服务生效：
+```markdown
+sudo service motion restart
+# 或者
+sudo systemctl restart motion.service
+ ```
+## 摄像头基本使用流程
+- 连接摄像头： 将 USB 摄像头插入树莓派 USB 口，或正确连接 CSI 摄像头并启用（sudo raspi-config > Interface Options > Legacy Camera 或 Camera > Enable）。
+- 启动服务： sudo service motion start
+- 测试访问： 在树莓派或同一局域网内的电脑/手机浏览器访问 http://<树莓派IP>:8081 (或你设置的端口) 查看实时流。
+
+  
 ## 软件依赖
 - Python 3.7+
 - Flask
@@ -66,21 +85,32 @@
 - RPi.GPIO
 - psutil
 - Adafruit_DHT
-- 
-## 安装依赖：
-pip install -r requirements.txt
+```markdown
+sudo apt-get install python3-pip python3-dev
+pip install Adafruit-DHT RPi.GPIO psutil flask pytz tzlocal rpi-ws281x
+pip install smtplib email
+```
 
-## 配置硬件引脚（修改 config.json）：
+## 配置硬件引脚说明（修改 config.json）：
 ```markdown
 {
-  "led_count": 10,
-  "led_brightness": 230,
-  "buzzer_pin": 17,
-  "fan_pin": 24,
-  "pump_pin": 22,
-  "water_sensor_top_pin": 25,
-  "water_sensor_bottom_pin": 23,
-  "dht11_pin": 5
+  "led_count": 10, #led灯珠数量
+  "led_brightness": 230, #亮度
+  "active_color": [0, 100, 0], #触发时颜色
+  "idle_color": [0, 0, 0], #闲置时颜色
+  "buzzer_pin": 17, #蜂鸣器引脚
+  "buzzer_beep_duration": 0.2, #间隔时间
+  "buzzer_beep_interval": 0.1, #间隔时间
+  "fan_pin": 24,  # 风扇控制引脚
+  "fan_enabled": False,  # 风扇状态
+  "pump_pin": 6,  # 气泵控制引脚原来是 (GPIO6)
+  "pump_enabled": False,  # 气泵状态
+  "water_pump_pin": 19,  # 水泵控制引脚 (GPIO19)
+  "water_pump_enabled": False,  # 水泵状态
+  "water_sensor_top_pin": 25, #高水位引脚
+  "water_sensor_bottom_pin": 23, #低水位引脚
+  "dht11_pin": 5, #温湿度度模块引脚
+  "database_path": "/var/lib/fishtank/sensor_data.db" #数据库地址
 }
 ```
 
