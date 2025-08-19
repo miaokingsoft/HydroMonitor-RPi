@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>闲沐鱼缸生态监测远控系统v1.2</title>
+    <title>闲沐鱼缸生态监测远控系统v1.3</title>
     <!-- 本地 Bootstrap CSS -->
     <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">    
     <!-- 本地 Font Awesome CSS -->
@@ -154,8 +154,8 @@
         
         .control-group {
             flex: 1;
-            min-width: 250px;
-            max-width: 320px;
+            min-width: 180px;
+            /*max-width: 320px;*/
             background: rgba(0, 0, 0, 0.2);
             border-radius: 15px;
             padding: 15px;
@@ -341,6 +341,122 @@
 .btn-disabled:hover {
     transform: none !important;
 }
+
+/* 添加水泵状态样式 */
+    .water-pump-active {
+        background-color: #20c997;
+    }
+    
+    .water-pump-idle {
+        background-color: #6c757d;
+    }
+    
+ /* 横向亮度滑块样式 */
+.brightness-control-horizontal {
+    text-align: center;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 15px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.brightness-horizontal-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.brightness-indicator-horizontal {
+    width: 100%;
+    height: 200px;
+    border-radius: 8px;
+    background-color: var(--active-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 36px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.3s;
+}
+
+.slider-container {
+    width: 100%;
+    position: relative;
+    padding: 10px 0;
+}
+
+.brightness-slider-horizontal {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, 
+        rgba(255, 255, 255, 0.2), 
+        var(--active-color));
+    outline: none;
+    cursor: pointer;
+    margin: 10px 0;
+}
+
+.brightness-slider-horizontal::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    border: 2px solid var(--active-color);
+    transition: all 0.2s;
+}
+
+.brightness-slider-horizontal::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 5px;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.8rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .brightness-indicator-horizontal {
+        width: 70px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    
+    .brightness-slider-horizontal::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+    .timer-control {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .timer-control .input-group {
+        margin-bottom: 5px;
+    }
+    
+    #pumpTimerInput {
+        text-align: center;
+    }
+    .form-control {
+        color: #15f1cd;
+    }
+
     </style>
 </head>
 <body>
@@ -351,7 +467,7 @@
             <div class="col-lg-10">
                 <div class="card p-4 mb-4">
                     <h1 class="text-center mb-4">
-                        <i class="fas fa-fish"></i> 闲沐鱼缸生态监测远控系统v1.2
+                        <i class="fas fa-fish"></i> 闲沐鱼缸生态监测远控系统v1.3
                     </h1>
 
                     <!-- 修改直播容器部分 -->
@@ -441,10 +557,29 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 水泵控制组 -->
+                        <div class="control-group">
+                            <div id="waterPumpStatus" class="status-badge">
+                                <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            </div>
+                            <div class="control-buttons">
+                                <div class="switch-container">
+                                    <span class="switch-label">滴灌蓄水</span>
+                                    <label class="ios-switch">
+                                        <input type="checkbox" id="waterPumpSwitch">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <div class="device-status status-off" id="waterPumpStatusText">关闭</div>
+                                </div>
+                                
+                                
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="row mb-4 mt-4">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <button id="testBuzzerBtn" class="btn btn-warning btn-control w-100 btn-test">
                                 <i class="fas fa-bell"></i> 签到
                             </button>
@@ -452,7 +587,7 @@
                                 <i class="fas fa-volume-up"></i> 蜂鸣器提醒
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <a href="/feeding" class="btn btn-info btn-control w-100" >
                                 <i class="fas fa-clock"></i> 喂食计划管理
                             </a>                            
@@ -460,27 +595,45 @@
                                 <i class="fas fa-clock"></i> 上次投喂: <span id="lastFeedTime">无记录</span>
                             </div>
                         </div>
+                        <div class="col-md-4">                                              
+                            <!-- 添加定时控制 -->
+                            <button  id="startPumpTimerBtn" class="btn btn-success btn-control w-100 btn-test">
+                                <i class="fas fa-tint"></i> 计时灌溉
+                            </button>
+                            <div class="text-center mt-2 text-white" >                               
+                                <div id="countdownDisplay" style="font-size: 1.2rem; font-weight: bold; margin-top: 5px;"></div>
+                            </div>
+                            
+                        </div>
                     </div>
                     
-                    <div class="config-panel mb-4">                       
+                    <div class="config-panel mb-4 row">                       
                         
-                        <div class="mb-4">
-                            <label class="form-label">亮度: <span id="brightnessValue">200</span></label>
-                            <input type="range" class="form-range" id="brightness" min="0" max="255" value="200">
+                        <div class="col-md-4">
+                            <label class="form-label">激活时颜色</label>
+                            <div id="activeColorPicker" class="mb-2"></div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <label class="form-label">空闲时颜色</label>
+                            <div id="idleColorPicker" class="mb-2"></div>
+                        </div>
+                        
+                        <!-- 修改亮度调节器样式 -->
+                        <div class="col-md-4">
+                            <div class="brightness-control-vertical">
+                                <label class="form-label text-center mb-3">亮度调节</label>
+                                <div class="brightness-vertical-wrapper">
+                                    <div class="brightness-indicator-horizontal" id="brightnessIndicator">
+                                        <span id="brightnessValue">230</span>
+                                    </div>
+                                    <input type="range" class="brightness-slider-horizontal" id="brightness" min="0" max="255" value="230" orient="vertical">                                    
+                                </div>
+                            </div>
                         </div>
 
                     </div>
-                    <div class="config-panel mb-4 row">                        
-                        <div class="col">
-                            <label class="form-label">激活时颜色</label>
-                            <div id="activeColorPicker" class="mb-4"></div>
-                        </div>
-                        
-                        <div class="col">
-                            <label class="form-label">空闲时颜色</label>
-                            <div id="idleColorPicker" class="mb-4"></div>
-                        </div>
-                    </div>
+                   
                     <div class="config-panel mb-4">    
                         <button id="saveConfigBtn" class="btn btn-primary w-100">
                             <i class="fas fa-save"></i> 保存设置
@@ -520,6 +673,9 @@
                                     <a href="http://www.wwzu.com/yugang.html" target="_blank" class="btn btn-secondary">
                                         <i class="fas fa-cog"></i> 仅鱼缸直播画面（公网）
                                     </a>
+                                    <a href="https://github.com/miaokingsoft/HydroMonitor-RPi" target="_blank" class="btn btn-secondary">
+                                        <i class="fas fa-gift"></i> GitHub/HydroMonitor-RPi
+                                    </a>
 
                                     
                                 </div>
@@ -529,7 +685,7 @@
                 </div>
                 
                 <footer class="text-center text-white-50">
-                    <p> &copy; 2025 闲沐工坊（请抖音关注） MiaoKing QQ：7740840 | 树莓派4B+ IP: {{ ip }}:{{ port }}</p>
+                    <p> &copy; 2025 <a href="https://www.goofish.com/personal?spm=a21ybx.item.itemHeader.1.6eff3da68xbBYL&userId=21869137" target="_blank" >闲沐工坊</a>（请抖音关注） MiaoKing QQ：7740840 | 树莓派4B+ IP: {{ ip }}:{{ port }}</p>
                 </footer>
             </div>
         </div>
@@ -561,7 +717,11 @@
         const lastActivitySpan = document.getElementById('lastActivity');
         const cpuTempSpan = document.getElementById('cpuTemp');
         const memUsageSpan = document.getElementById('memUsage');
-        
+        // 获取水泵开关元素
+        const waterPumpSwitch = document.getElementById('waterPumpSwitch');
+        const waterPumpStatusText = document.getElementById('waterPumpStatusText');
+
+
         // 获取开关元素
         const ledSwitch = document.getElementById('ledSwitch');
         const fanSwitch = document.getElementById('fanSwitch');
@@ -630,6 +790,80 @@
                     }
                 });
         });
+
+        let countdownInterval;
+
+        function startCountdown(seconds) {
+            clearInterval(countdownInterval); // 清除已有计时器
+            const countdownDisplay = document.getElementById('countdownDisplay');
+            
+            let remaining = seconds;
+            updateCountdownDisplay(remaining);
+            
+            countdownInterval = setInterval(() => {
+                remaining--;
+                updateCountdownDisplay(remaining);
+                
+                if (remaining <= 0) {
+                    clearInterval(countdownInterval);
+                    // 可选：添加计时结束后的操作
+                }
+            }, 1000);
+        }
+
+        function updateCountdownDisplay(seconds) {
+            const countdownDisplay = document.getElementById('countdownDisplay');
+            if (seconds > 0) {
+                countdownDisplay.textContent = `倒计时: ${seconds}秒`;
+                countdownDisplay.style.color = seconds <= 10 ? '#ff0000' : '#ffffff';
+            } else {
+                countdownDisplay.textContent = '灌溉已完成';
+                countdownDisplay.style.color = '#00ff00';
+            }
+        }
+
+        // 水泵开关控制
+        waterPumpSwitch.addEventListener('change', () => {
+            const endpoint = waterPumpSwitch.checked ? '/water_pump/on' : '/water_pump/off';
+            fetch(endpoint)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateStatus();
+                    } else {
+                        waterPumpSwitch.checked = !waterPumpSwitch.checked;
+                        updateDeviceStatusText();
+                    }
+                });
+        });
+
+        // 水泵定时控制
+        document.getElementById('startPumpTimerBtn').addEventListener('click', () => {
+            const seconds = 98;
+            
+            if (isNaN(seconds) || seconds < 1 || seconds > 300) {
+                showAlert('请输入1-300之间的数字', 'danger');
+                return;
+            }
+            
+            fetch(`/water_pump/timer/${seconds}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(`水泵已启动，将在${seconds}秒后自动关闭`, 'success');
+                        // 更新开关状态
+                        document.getElementById('waterPumpSwitch').checked = true;
+                        updateDeviceStatusText();
+                        // 启动倒计时显示
+                        startCountdown(seconds);
+                    } else {
+                        showAlert('启动水泵失败', 'danger');
+                    }
+                })
+                .catch(error => {
+                    showAlert('请求失败: ' + error.message, 'danger');
+                });
+        });
         
         // 测试蜂鸣器
         testBuzzerBtn.addEventListener('click', () => {
@@ -640,6 +874,13 @@
                         showAlert('蜂鸣器测试成功!', 'success');
                     }
                 });
+        });
+
+        // 保持原有亮度控制逻辑不变
+        brightnessSlider.addEventListener('input', () => {
+            brightnessValue.textContent = brightnessSlider.value;
+            document.getElementById('brightnessIndicator').style.backgroundColor = 
+                `rgb(${activeColorPicker.color.rgb.r}, ${activeColorPicker.color.rgb.g}, ${activeColorPicker.color.rgb.b})`;
         });
 
 
@@ -698,6 +939,9 @@
             
             pumpStatusText.textContent = pumpSwitch.checked ? '开启' : '关闭';
             pumpStatusText.className = `device-status ${pumpSwitch.checked ? 'status-on' : 'status-off'}`;
+
+            waterPumpStatusText.textContent = waterPumpSwitch.checked ? '开启' : '关闭';
+            waterPumpStatusText.className = `device-status ${waterPumpSwitch.checked ? 'status-on' : 'status-off'}`;
         }
         
         // 更新状态
@@ -737,9 +981,24 @@
                         pumpStatusBadge.className = 'status-badge pump-idle';
                         pumpSwitch.checked = false;
                     }
+
+                    // 更新水泵状态
+                    if (data.water_pump_enabled) {
+                        document.getElementById('waterPumpStatus').innerHTML = '<i class="fas fa-tint"></i> 蓄水已开启';
+                        document.getElementById('waterPumpStatus').className = 'status-badge water-pump-active';
+                        document.getElementById('waterPumpSwitch').checked = true;
+                    } else {
+                        document.getElementById('waterPumpStatus').innerHTML = '<i class="fas fa-tint"></i> 蓄水已关闭';
+                        document.getElementById('waterPumpStatus').className = 'status-badge water-pump-idle';
+                        document.getElementById('waterPumpSwitch').checked = false;
+                    }
                     
                     // 更新设备状态文本
                     updateDeviceStatusText();
+
+                    // 更新亮度指示器颜色
+                document.getElementById('brightnessIndicator').style.backgroundColor = 
+                    `rgb(${activeColorPicker.color.rgb.r}, ${activeColorPicker.color.rgb.g}, ${activeColorPicker.color.rgb.b})`;
                     
                     // 更新系统信息
                     connectionsSpan.textContent = data.connections;
@@ -828,6 +1087,14 @@
 
                 });
         }
+
+        // 亮度滑块事件监听
+        brightnessSlider.addEventListener('input', () => {
+            brightnessValue.textContent = brightnessSlider.value;
+            // 更新亮度指示器颜色
+            document.getElementById('brightnessIndicator').style.backgroundColor = 
+                `rgb(${activeColorPicker.color.rgb.r}, ${activeColorPicker.color.rgb.g}, ${activeColorPicker.color.rgb.b})`;
+        });
         
         // 显示通知
         function showAlert(message, type) {
