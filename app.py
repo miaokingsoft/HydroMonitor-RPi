@@ -96,8 +96,10 @@ def create_default_config():
         "buzzer_beep_interval": 0.1,
         "fan_pin": 24,  # 风扇引脚
         "fan_enabled": False,  # 风扇状态
-        "pump_pin": 22,  # 气泵引脚 (GPIO22)
+        "pump_pin": 6,  # 气泵引脚原来是 (GPIO22)
         "pump_enabled": False,  # 气泵状态
+        "water_pump_pin": 19,  # 水泵引脚 (GPIO19)
+        "water_pump_enabled": False,  # 水泵状态
         "water_sensor_top_pin": 25,
         "water_sensor_bottom_pin": 23,
         "dht11_pin": 5,
@@ -119,6 +121,8 @@ active_connections = set()
 lock = threading.Lock()
 fan_enabled = False  # 风扇状态
 pump_enabled = False  # 气泵状态
+water_pump_enabled = False  # 水泵状态
+water_pump_timer = None #执行时间（秒）
 water_level = "unknown"  # 水位状态：high/normal/low/unknown
 dht_sensor = Adafruit_DHT.DHT11
 current_temp = None #室温
@@ -146,20 +150,31 @@ def init_gpio():
     try:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(config['buzzer_pin'], GPIO.OUT)
-        GPIO.output(config['buzzer_pin'], GPIO.HIGH)
+        GPIO.output(config['buzzer_pin'], GPIO.LOW)
         # 初始化风扇引脚
         GPIO.setup(config['fan_pin'], GPIO.OUT)
         global fan_enabled
         fan_enabled = config['fan_enabled']
         # 继电器低电平触发
-        GPIO.output(config['fan_pin'], GPIO.HIGH if fan_enabled else GPIO.LOW)
+        #GPIO.output(config['fan_pin'], GPIO.HIGH if fan_enabled else GPIO.LOW)
+        GPIO.output(config['fan_pin'], GPIO.LOW if fan_enabled else GPIO.HIGH)
+        # 继电器高电平触发
+       
+        #GPIO.output(config['pump_pin'], GPIO.LOW if fan_enabled else GPIO.HIGH)
 
-        # 初始化气泵引脚 (GPIO22)
+        # 初始化气泵引脚 (GPIO6)
         GPIO.setup(config['pump_pin'], GPIO.OUT)
         global pump_enabled
         pump_enabled = config['pump_enabled']
-        # 继电器低电平触发
-        GPIO.output(config['pump_pin'], GPIO.HIGH if fan_enabled else GPIO.LOW)
+        #GPIO.output(config['pump_pin'], GPIO.HIGH if fan_enabled else GPIO.LOW)
+        GPIO.output(config['pump_pin'], GPIO.LOW if fan_enabled else GPIO.HIGH)
+
+        # 初始化水泵引脚 (GPIO19)
+        GPIO.setup(config['water_pump_pin'], GPIO.OUT)
+        global water_pump_enabled
+        water_pump_enabled = config['water_pump_enabled']
+        GPIO.output(config['water_pump_pin'], GPIO.LOW if water_pump_enabled else GPIO.HIGH)
+   
 
         # 初始化水位传感器引脚
         GPIO.setup(config['water_sensor_top_pin'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -210,7 +225,8 @@ def set_fan_state(enabled):
     global fan_enabled
     fan_enabled = enabled
 
-    GPIO.output(config['fan_pin'], GPIO.HIGH if enabled else GPIO.LOW)
+    #GPIO.output(config['fan_pin'], GPIO.HIGH if enabled else GPIO.LOW)
+    GPIO.output(config['fan_pin'], GPIO.LOW if enabled else GPIO.HIGH)
     logger.info(f"风扇状态已设置为: {'开启' if enabled else '关闭'}")
     return True
 
@@ -220,9 +236,42 @@ def set_pump_state(enabled):
     global pump_enabled
     pump_enabled = enabled
     
-    # 继电器高电平触发
-    GPIO.output(config['pump_pin'], GPIO.HIGH if enabled else GPIO.LOW)    
+    # 继电器低电平触发
+    #GPIO.output(config['pump_pin'], GPIO.HIGH if enabled else GPIO.LOW) 
+    # 继电器高电平触发    
+    GPIO.output(config['pump_pin'], GPIO.LOW if enabled else GPIO.HIGH)   
     logger.info(f"气泵状态已设置为: {'开启' if enabled else '关闭'}")
+    return True
+
+# 水泵控制函数 20250815
+def set_water_pump_state(enabled):
+    """设置水泵状态"""
+    global water_pump_enabled
+    water_pump_enabled = enabled
+    GPIO.output(config['water_pump_pin'], GPIO.LOW if enabled else GPIO.HIGH)
+    logger.info(f"水泵状态已设置为: {'开启' if enabled else '关闭'}")
+    return True
+
+# 水泵定时控制函数 20250816
+def run_water_pump_for_seconds(seconds):
+    """运行水泵指定秒数后自动关闭"""
+    global water_pump_timer
+    
+    # 先取消之前的定时器（如果有）
+    if water_pump_timer is not None:
+        water_pump_timer.cancel()
+    
+    # 开启水泵
+    set_water_pump_state(True)
+    
+    # 设置定时器关闭水泵
+    def turn_off_pump():
+        set_water_pump_state(False)
+        logger.info(f"水泵已运行{seconds}秒，自动关闭")
+    
+    water_pump_timer = threading.Timer(seconds, turn_off_pump)
+    water_pump_timer.start()
+    logger.info(f"水泵已开启，将在{seconds}秒后自动关闭")
     return True
 
 # 水位检测函数
@@ -305,17 +354,17 @@ def set_all_leds(color):
         logger.error(f"设置LED时出错: {str(e)}")
 
 # 控制蜂鸣器
-def beep_buzzer():
+def beep_buzzer(num=2):
     try:
         pin = config['buzzer_pin']
         duration = config['buzzer_beep_duration']
         interval = config['buzzer_beep_interval']
         
-        # 滴滴两声
-        for _ in range(3):
-            GPIO.output(pin, GPIO.LOW)
+        # 默认滴滴两声
+        for _ in range(num):
+            GPIO.output(pin,GPIO.HIGH)
             time.sleep(duration)
-            GPIO.output(pin, GPIO.HIGH)
+            GPIO.output(pin,GPIO.LOW)
             time.sleep(interval)
         
         logger.info("蜂鸣器已触发")
@@ -569,6 +618,7 @@ def status():
             "water_temp": current_water_temp,  # 水温
             "fan_enabled": fan_enabled,  # 风扇状态
             "pump_enabled": pump_enabled,  # 气泵状态
+            "water_pump_enabled": water_pump_enabled, #水泵状态
             "water_level": water_level,  # 水位状态
             "temperature": current_temp,    # # 使用后台线程更新的温度
             "humidity": current_humidity,    # 使用后台线程更新的湿度
@@ -587,6 +637,47 @@ def control_fan(state):
         return jsonify({"status": "success" if success else "error"})
     else:
         return jsonify({"status": "error", "message": "无效的指令"}), 400
+
+# 气泵控制路由
+@app.route('/pump/<state>')
+def control_pump(state):
+    """控制气泵API"""
+    if state == 'on':
+        success = set_pump_state(True)
+        return jsonify({"status": "success" if success else "error"})
+    elif state == 'off':
+        success = set_pump_state(False)
+        return jsonify({"status": "success" if success else "error"})
+    else:
+        return jsonify({"status": "error", "message": "无效的指令"}), 400
+
+
+# 添加水泵控制路由
+@app.route('/water_pump/<state>')
+def control_water_pump(state):
+    """控制水泵API"""
+    if state == 'on':
+        success = set_water_pump_state(True)
+        return jsonify({"status": "success" if success else "error"})
+    elif state == 'off':
+        success = set_water_pump_state(False)
+        return jsonify({"status": "success" if success else "error"})
+    else:
+        return jsonify({"status": "error", "message": "无效的指令"}), 400
+
+# 添加水泵定时控制路由
+@app.route('/water_pump/timer/<int:seconds>')
+def control_water_pump_timer(seconds):
+    """控制水泵运行指定秒数API"""
+    if seconds <= 0:
+        return jsonify({"status": "error", "message": "时间必须大于0"}), 400    
+    try:
+        success = run_water_pump_for_seconds(seconds)
+        return jsonify({"status": "success" if success else "error"})
+    except Exception as e:
+        logger.error(f"水泵定时控制失败: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 
 # 获取配置路由 - 添加颜色格式兼容处理
 @app.route('/get_config')
@@ -664,10 +755,16 @@ def update_config():
         
         # 验证气泵配置
         if 'pump_pin' in new_config:
-            new_config['pump_pin'] = validate_value('pump_pin', 1, 27, 22)  # 默认GPIO22
+            new_config['pump_pin'] = validate_value('pump_pin', 1, 27, 6)  # 默认GPIO22
         if 'pump_enabled' in new_config:
             new_config['pump_enabled'] = bool(new_config['pump_enabled'])
 
+        # 验证水泵配置
+        if 'water_pump_pin' in new_config:
+            new_config['water_pump_pin'] = validate_value('water_pump_pin', 1, 27,19)  # 默认GPIO19
+        if 'water_pump_enabled' in new_config:
+            new_config['water_pump_enabled'] = bool(new_config['water_pump_enabled'])
+        
         # 更新全局配置
         config.update(new_config)
 
@@ -678,6 +775,10 @@ def update_config():
         # 应用气泵状态
         if 'pump_enabled' in new_config:
             set_pump_state(new_config['pump_enabled'])
+
+        # 应用水泵状态
+        if 'water_pump_enabled' in new_config:
+            set_pump_state(new_config['water_pump_enabled'])
         
         # 保存到文件
         with open(CONFIG_PATH, 'w') as f:
@@ -735,23 +836,10 @@ def web_deactivate():
 @app.route('/test_buzzer')
 def test_buzzer():
     """测试蜂鸣器API"""
-    if beep_buzzer():
+    if beep_buzzer(5):
         return jsonify({"status": "success"})
  
     return jsonify({"status": "error"}), 500
-
-# 气泵控制路由
-@app.route('/pump/<state>')
-def control_pump(state):
-    """控制气泵API"""
-    if state == 'on':
-        success = set_pump_state(True)
-        return jsonify({"status": "success" if success else "error"})
-    elif state == 'off':
-        success = set_pump_state(False)
-        return jsonify({"status": "success" if success else "error"})
-    else:
-        return jsonify({"status": "error", "message": "无效的指令"}), 400
 
 
 
@@ -1006,7 +1094,7 @@ def delete_schedule(schedule_id):
 # 获取喂食记录
 @app.route('/api/feeding/logs', methods=['GET'])
 def get_feeding_logs():
-    limit = request.args.get('limit', 50)
+    limit = request.args.get('limit', 10)
     conn = sqlite3.connect(config['database_path'])
     c = conn.cursor()
     
@@ -1152,7 +1240,6 @@ def main():
     monitor_thread = threading.Thread(target=monitor_motion_connections, daemon=True)
     monitor_thread.start()
 
-    # 启动喂食计划检查线程
     # 启动喂食计划检查线程
     feeding_thread = threading.Thread(target=check_feeding_schedules, daemon=True)
     feeding_thread.start()
