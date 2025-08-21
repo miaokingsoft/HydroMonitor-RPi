@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>访问统计 - 闲沐智能鱼缸系统</title>
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .table-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .stat-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-12">
+                <div class="card p-4 mb-4">
+                    <h1 class="text-center mb-4">
+                        <i class="fas fa-chart-bar"></i> 访问统计
+                    </h1>
+
+                    <!-- 统计卡片 -->
+                    <!-- 在统计卡片部分修改 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-label">独立IP访问</div>
+            <div class="stat-value" id="unique-ips">--</div>
+            <div>个地址</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-label">总请求数</div>
+            <div class="stat-value" id="total-requests">--</div>
+            <div>次请求</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-label">签到次数</div>
+            <div class="stat-value" id="signin-count">--</div>
+            <div>次签到</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-label">最活跃IP</div>
+            <div class="stat-value" id="top-ip-count">--</div>
+            <div id="top-ip-address">--</div>
+        </div>
+    </div>
+</div>
+
+
+
+                    <!-- 时间范围选择 -->
+                    <div class="row mb-3">
+                        <div class="col text-center">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-light active time-range" data-range="day">24小时</button>
+                                <button type="button" class="btn btn-outline-light time-range" data-range="week">一周</button>
+                                <button type="button" class="btn btn-outline-light time-range" data-range="month">一月</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 访问量图表 -->
+                    <div class="chart-title">访问量统计</div>
+                    <div class="chart-container">
+                        <canvas id="accessChart"></canvas>
+                    </div>
+
+                    <!-- 在图表后添加最活跃IP列表 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h3 class="text-center mb-3">最活跃IP地址</h3>
+                            <div class="table-container">
+                                <table class="table table-dark table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>IP地址</th>
+                                            <th>访问次数</th>
+                                            <th>最后访问</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="top-ips-list">
+                                        <!-- 最活跃IP列表将通过JavaScript动态加载 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="text-center mb-3">IP访问详情</h3>
+                            <div id="ip-details" class="table-container">
+                                <div class="text-center text-muted py-5">
+                                    点击左侧IP地址查看详情
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 签到按钮 -->
+                    <!--<div class="text-center mb-4">
+                        <button id="signin-btn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-check-circle"></i> 点击签到
+                        </button>
+                    </div>
+                -->
+
+                    <!-- 签到记录 -->
+                    <h3 class="text-center mb-3">最近签到记录</h3>
+                    <div class="table-container">
+                        <table class="table table-dark table-striped">
+                            <thead>
+                                <tr>
+                                    <th>IP地址</th>
+                                    <th>签到时间</th>
+                                    <th>设备信息</th>
+                                </tr>
+                            </thead>
+                            <tbody id="signin-records">
+                                <!-- 签到记录将通过JavaScript动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <a href="/" class="btn btn-primary back-link">
+                        <i class="fas fa-arrow-left"></i> 返回控制面板
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let accessChart;
+
+        // 初始化访问统计图表
+        function initAccessChart() {
+            const ctx = document.getElementById('accessChart').getContext('2d');
+            
+            accessChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '访问量',
+                        data: [],
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 加载访问统计数据
+        // 修改加载统计数据的函数
+        // 修改加载统计数据的函数
+        function loadAccessStats(range = 'day') {
+            fetch(`/api/access/stats?range=${range}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (accessChart) {
+                        accessChart.data.labels = data.labels;
+                        accessChart.data.datasets[0].data = data.values;
+                        accessChart.data.datasets[0].label = `独立IP数量 (${data.time_range})`;
+                        accessChart.update();
+                        
+                        document.getElementById('unique-ips').textContent = data.unique_ips;
+                        document.getElementById('total-requests').textContent = data.total_requests;
+                        
+                        // 更新最活跃IP
+                        if (data.top_ips && data.top_ips.length > 0) {
+                            document.getElementById('top-ip-count').textContent = data.top_ips[0].visit_count;
+                            document.getElementById('top-ip-address').textContent = data.top_ips[0].ip;
+                            updateTopIPsList(data.top_ips);
+                        }
+                    }
+                });
+        }
+
+        // 更新最活跃IP列表
+        function updateTopIPsList(topIPs) {
+            const tbody = document.getElementById('top-ips-list');
+            tbody.innerHTML = '';
+            
+            topIPs.forEach(ipData => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${ipData.ip}</td>
+                    <td>${ipData.visit_count}</td>
+                    <td>${ipData.last_visit}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info view-ip-details" data-ip="${ipData.ip}">
+                            <i class="fas fa-eye"></i> 查看
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // 添加查看详情事件
+            document.querySelectorAll('.view-ip-details').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const ip = this.getAttribute('data-ip');
+                    loadIPDetails(ip);
+                });
+            });
+        }
+
+        // 加载IP详情
+function loadIPDetails(ipAddress) {
+    fetch(`/api/access/ip/${encodeURIComponent(ipAddress)}`)
+        .then(response => response.json())
+        .then(data => {
+            const detailsContainer = document.getElementById('ip-details');
+            
+            if (data.status === 'error') {
+                detailsContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i> ${data.message}
+                    </div>
+                `;
+                return;
+            }
+            
+            // 构建路径统计表格
+            let pathStatsHtml = '';
+            if (data.path_stats && data.path_stats.length > 0) {
+                pathStatsHtml = `
+                    <h5>访问路径统计</h5>
+                    <table class="table table-sm table-dark">
+                        <thead>
+                            <tr>
+                                <th>路径</th>
+                                <th>访问次数</th>
+                                <th>最后访问</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.path_stats.map(stat => `
+                                <tr>
+                                    <td>${stat.path}</td>
+                                    <td>${stat.visit_count}</td>
+                                    <td>${stat.last_visit}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+            
+            // 构建最近访问表格
+            let recentVisitsHtml = '';
+            if (data.recent_visits && data.recent_visits.length > 0) {
+                recentVisitsHtml = `
+                    <h5>最近20次访问</h5>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>路径</th>
+                                    <th>方法</th>
+                                    <th>时长</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.recent_visits.map(visit => `
+                                    <tr>
+                                        <td>${visit.access_time}</td>
+                                        <td>${visit.path}</td>
+                                        <td>${visit.method}</td>
+                                        <td>${visit.duration}</td>
+                                        <td>${visit.status_code}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            detailsContainer.innerHTML = `
+                <div class="card bg-dark mb-3">
+                    <div class="card-header">
+                        <h4>IP地址: ${data.ip_address}</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <strong>总访问次数:</strong> ${data.total_visits}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>首次访问:</strong> ${data.first_visit}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>最后访问:</strong> ${data.last_visit}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>平均时长:</strong> ${data.avg_duration}
+                            </div>
+                        </div>
+                        ${pathStatsHtml}
+                        ${recentVisitsHtml}
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error loading IP details:', error);
+        });
+}
+
+        // 添加加载签到统计的函数
+        function loadSigninStats() {
+            fetch('/api/signin/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('signin-count').textContent = data.total_signins;
+                });
+        }
+
+
+        // 加载签到记录
+        function loadSigninRecords() {
+            fetch('/api/signin/records?limit=20')
+                .then(response => response.json())
+                .then(records => {
+                    const tbody = document.getElementById('signin-records');
+                    tbody.innerHTML = '';
+                    
+                    records.forEach(record => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${record.ip}</td>
+                            <td>${record.time}</td>
+                            <td>${record.user_agent.substring(0, 50)}...</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    document.getElementById('signin-count').textContent = records.length;
+                    
+                    // 计算独立IP数量
+                    const uniqueIPs = new Set(records.map(r => r.ip)).size;
+                    document.getElementById('unique-ips').textContent = uniqueIPs;
+                });
+        }
+
+
+
+        // 修改初始化函数
+        document.addEventListener('DOMContentLoaded', function() {
+            initAccessChart();
+            loadAccessStats('day');
+            loadSigninRecords();
+            loadSigninStats();
+            
+            // 时间范围按钮事件
+            document.querySelectorAll('.time-range').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.time-range').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    loadAccessStats(this.dataset.range);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>闲沐鱼缸生态监测远控系统v1.3</title>
+    <title>闲沐智能鱼缸系统v1.3</title>
     <!-- 本地 Bootstrap CSS -->
     <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">    
     <!-- 本地 Font Awesome CSS -->
@@ -467,7 +467,7 @@
             <div class="col-lg-10">
                 <div class="card p-4 mb-4">
                     <h1 class="text-center mb-4">
-                        <i class="fas fa-fish"></i> 闲沐鱼缸生态监测远控系统v1.3
+                        <i class="fas fa-fish"></i> 闲沐智能鱼缸系统v1.3
                     </h1>
 
                     <!-- 修改直播容器部分 -->
@@ -581,15 +581,15 @@
                     <div class="row mb-4 mt-4">
                         <div class="col-md-4">
                             <button id="testBuzzerBtn" class="btn btn-warning btn-control w-100 btn-test">
-                                <i class="fas fa-bell"></i> 签到
+                                <i class="fas fa-bell"></i> 来访签到
                             </button>
-                            <div class="text-center mt-2 text-white" >
+                            <div class="text-center mt-2 text-white" id="fan_message">
                                 <i class="fas fa-volume-up"></i> 蜂鸣器提醒
                             </div>
                         </div>
                         <div class="col-md-4">
                             <a href="/feeding" class="btn btn-info btn-control w-100" >
-                                <i class="fas fa-clock"></i> 喂食计划管理
+                                <i class="fas fa-clock"></i> 任务管理
                             </a>                            
                             <div class="text-center mt-2 text-white" id="feedStatus">
                                 <i class="fas fa-clock"></i> 上次投喂: <span id="lastFeedTime">无记录</span>
@@ -646,16 +646,22 @@
                                 <h4><i class="fas fa-info-circle"></i> 系统信息</h4>
                                 <ul class="list-group list-group-flush">
                                     <li class="list-group-item bg-transparent text-white">
-                                        <i class="fas fa-microchip"></i> CPU温度: <span id="cpuTemp">--</span>°C
+                                        <i class="fas fa-microchip"></i>  CPU温度: <span id="cpuTemp">--</span>°C
                                     </li>
                                     <li class="list-group-item bg-transparent text-white">
-                                        <i class="fas fa-memory"></i> 内存使用: <span id="memUsage">--</span>%
+                                        <i class="fas fa-memory"></i>  内存使用: <span id="memUsage">--</span>%
                                     </li>
                                     <li class="list-group-item bg-transparent text-white">
-                                        <i class="fas fa-plug"></i> 活动连接: <span id="connections">0</span>
+                                        <i class="fas fa-plug"></i>  活动连接: <span id="connections">0</span>
                                     </li>
                                     <li class="list-group-item bg-transparent text-white">
-                                        <i class="fas fa-clock"></i> 最后活动: <span id="lastActivity">--:--:--</span>
+                                        <i class="fas fa-clock"></i>  最后活动: <span id="lastActivity">--:--:--</span>
+                                    </li>
+                                    <li class="list-group-item bg-transparent text-white">
+                                        <i class="fas fa-cloud-upload"></i>  上传速度: <span id="upload_speed">0</span>KB/s
+                                    </li>
+                                    <li class="list-group-item bg-transparent text-white">
+                                        <i class="fas fa-cloud-download"></i>  下载速度: <span id="download_speed">0</span>KB/s
                                     </li>
                                 </ul>
                             </div>
@@ -665,8 +671,11 @@
                                 <h4><i class="fas fa-link"></i> 快速访问</h4>
                                 <div class="d-grid gap-2">
                                     <a href="/charts" class="btn btn-success">
-                                        <i class="fas fa-chart-line"></i> 查看温度历史数据
-                                    </a>                                   
+                                        <i class="fas fa-chart-line"></i> 温度历史数据
+                                    </a>     
+                                    <a  href="/access_stats" class="btn btn-success">
+                                        <i class="fas fa-chart-bar"></i> 网络访问统计
+                                    </a>                              
                                     <a href="http://192.168.0.216:8081" target="_blank" class="btn btn-secondary">
                                         <i class="fas fa-video"></i> 仅鱼缸直播画面（内网）
                                     </a>
@@ -716,6 +725,8 @@
         const connectionsSpan = document.getElementById('connections');
         const lastActivitySpan = document.getElementById('lastActivity');
         const cpuTempSpan = document.getElementById('cpuTemp');
+        const download_speedSpan = document.getElementById('download_speed');
+        const upload_speedSpan = document.getElementById('upload_speed');
         const memUsageSpan = document.getElementById('memUsage');
         // 获取水泵开关元素
         const waterPumpSwitch = document.getElementById('waterPumpSwitch');
@@ -839,10 +850,10 @@
 
         // 水泵定时控制
         document.getElementById('startPumpTimerBtn').addEventListener('click', () => {
-            const seconds = 98;
+            const seconds = 98; // 默认时间为98秒
             
-            if (isNaN(seconds) || seconds < 1 || seconds > 300) {
-                showAlert('请输入1-300之间的数字', 'danger');
+            if (isNaN(seconds) || seconds < 1 || seconds > 120) {
+                showAlert('请输入1-120之间的数字', 'danger');
                 return;
             }
             
@@ -865,15 +876,28 @@
                 });
         });
         
-        // 测试蜂鸣器
-        testBuzzerBtn.addEventListener('click', () => {
-            fetch('/test_buzzer')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showAlert('蜂鸣器测试成功!', 'success');
-                    }
-                });
+        // 签到 2025.8.20
+        testBuzzerBtn.addEventListener('click', function() {
+            document.getElementById('fan_message').innerHTML = '<i class="fas fa-spinner"></i> 签到中...';
+
+            fetch('/api/signin', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('fan_message').innerHTML = '<i class="fas fa-bell"></i> ';
+                if (data.status === 'success') {
+                    document.getElementById('fan_message').innerHTML += '签到成功！';
+                    showAlert('签到成功！', 'success');
+                } else {
+                    document.getElementById('fan_message').innerHTML = '<i class="fas fa-bell-slash"></i> 签到失败!';
+                    showAlert('签到失败: ' , data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('请求失败: ' + error.message, 'danger');
+                console.error('Error:',  error);
+            });
         });
 
         // 保持原有亮度控制逻辑不变
@@ -1006,6 +1030,8 @@
                         new Date(data.last_activity * 1000).toLocaleTimeString() : '--:--:--';
                     cpuTempSpan.textContent = data.cpu_temp || '--';
                     memUsageSpan.textContent = data.mem_usage || '--';
+                    download_speedSpan.textContent = data.download_speed || '--';
+                    upload_speedSpan.textContent = data.upload_speed || '--';
 
                     // 更新水位状态
                     const waterStatusBadge = document.getElementById('waterStatus');
