@@ -20,8 +20,12 @@
     "pump_enabled": false,
     "water_pump_pin": 19,
     "water_pump_enabled": false,
-    "water_sensor_top_pin": 25,
+    "water_sensor_top_pin": 25,    
     "water_sensor_bottom_pin": 23,
     "dht11_pin": 5,
-    "database_path": "/var/lib/fishtank/sensor_data.db"
+    "database_path": "/var/lib/fishtank/sensor_data.db",
+    "timezone": "Asia/Shanghai",
+    "max_temperature": 30,
+    "min_temperature": 27
+
 }

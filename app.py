@@ -1,14 +1,12 @@
 '''
-
-pip install Adafruit-DHT
-执行程序用 sudo python app.py
-水位的监控报警发邮件到7740840@qq.com,单独运行 python shui.py
-
+sudo python app.py
 sudo python fishtank.py
-包含水温、室温、湿度记录、水位的监控异常发邮件
+- 包含水温、室温、湿度记录、水位的监控异常发邮件
+- 水位的监控报警发邮件到7740840@qq.com
 
-V1.1 新增投喂按钮，投喂间隔2小时，投喂后会记录日志，调用舵机进行投喂
+V1.1 新增投喂按钮,投喂间隔2小时,投喂后会记录日志,调用舵机进行投喂
 V1.2 新增喂食计划管理，支持多计划设置，自动喂食
+V1.3 新增水泵的控制及定时计划,访问记录及图形化统计
 '''
 
 import os
@@ -19,7 +17,7 @@ import logging
 import traceback
 import socket
 import psutil
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, g
 from rpi_ws281x import PixelStrip, Color
 import RPi.GPIO as GPIO
 import glob
@@ -27,6 +25,8 @@ import Adafruit_DHT
 from datetime import datetime, timedelta
 import sqlite3
 import atexit
+import uuid
+import pytz
 
 # 配置日志
 logging.basicConfig(
@@ -87,11 +87,11 @@ def load_config():
 def create_default_config():
     """创建默认配置"""
     default_config = {
-        "led_count": 10,
-        "led_brightness": 230,
-        "active_color": [0, 100, 0],
-        "idle_color": [0, 0, 0],
-        "buzzer_pin": 17,
+        "led_count": 10, #led灯珠数量
+        "led_brightness": 230, #亮度
+        "active_color": [0, 100, 0], #触发时颜色
+        "idle_color": [0, 0, 0], #闲置时颜色
+        "buzzer_pin": 17, #蜂鸣器引脚
         "buzzer_beep_duration": 0.2,
         "buzzer_beep_interval": 0.1,
         "fan_pin": 24,  # 风扇引脚
@@ -100,10 +100,13 @@ def create_default_config():
         "pump_enabled": False,  # 气泵状态
         "water_pump_pin": 19,  # 水泵引脚 (GPIO19)
         "water_pump_enabled": False,  # 水泵状态
-        "water_sensor_top_pin": 25,
-        "water_sensor_bottom_pin": 23,
-        "dht11_pin": 5,
-        "database_path": "/var/lib/fishtank/sensor_data.db"
+        "water_sensor_top_pin": 25, #高水位引脚
+        "water_sensor_bottom_pin": 23, #低水位引脚
+        "dht11_pin": 5, #温湿度度模块引脚
+        "database_path": "/var/lib/fishtank/sensor_data.db", #数据库地址
+        "timezone": "Asia/Shanghai", #时区
+        "max_temperature": 30, #高温度阈值
+        "min_temperature": 27  #低温度阈值
     }
     try:
         with open(CONFIG_PATH, 'w') as f:
@@ -111,6 +114,41 @@ def create_default_config():
     except Exception as e:
         logger.error(f"创建默认配置失败: {str(e)}")
     return default_config
+
+# IP地址获取函数
+def get_real_client_ip():
+    # 检查代理协议头部
+    if request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    
+    # 检查X-Forwarded-For
+    x_forwarded_for = request.headers.get('X-Forwarded-For')
+    if x_forwarded_for:
+        ips = [ip.strip() for ip in x_forwarded_for.split(',')]
+        for ip in ips:
+            if not is_private_ip(ip):
+                return ip
+        return ips[0]
+    
+    return request.remote_addr
+
+# 检查是否为内网IP
+def is_private_ip(ip):
+    if ip in ['127.0.0.1', 'localhost', '::1']:
+        return True    
+    # 检查私有IP段
+    private_patterns = [
+        r'^10\.',          # 10.0.0.0/8
+        r'^172\.(1[6-9]|2[0-9]|3[0-1])\.',  # 172.16.0.0/12
+        r'^192\.168\.',    # 192.168.0.0/16
+        r'^fc00:',         # IPv6私有地址
+        r'^fd00:'          # IPv6私有地址
+    ]    
+    for pattern in private_patterns:
+        if re.match(pattern, ip):
+            return True
+    
+    return False
 
 # 全局变量
 config = load_config()
@@ -138,6 +176,10 @@ config.setdefault('database_path', '/var/lib/fishtank/sensor_data.db')
 # 确保数据库目录存在
 database_dir = os.path.dirname(config.get('database_path'))
 os.makedirs(database_dir, exist_ok=True)
+
+# 读取最大和最小水温温度阈值
+max_temperature = config['max_temperature']
+min_temperature = config['min_temperature']
 
 # 创建 Flask 应用
 app = Flask(__name__, 
@@ -186,6 +228,12 @@ def init_gpio():
         logger.error(f"GPIO初始化失败: {str(e)}")
         return False
 
+# 获取本地时间字符串
+def get_local_time():
+    tz = pytz.timezone(config.get('timezone', 'Asia/Shanghai'))
+    return datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+
+
 def init_servo():
     """初始化舵机"""
     try:
@@ -212,7 +260,7 @@ def get_water_temp():
             if lines[0].strip()[-3:] == 'YES':
                 temp_line = lines[1].find('t=')
                 if temp_line != -1:
-                    temp = float(lines[1][temp_line+2:]) / 1000.0
+                    temp = float(lines[1][temp_line+2:]) / 1000.0                    
                     return temp
             return None
     except Exception as e:
@@ -230,7 +278,7 @@ def set_fan_state(enabled):
     logger.info(f"风扇状态已设置为: {'开启' if enabled else '关闭'}")
     return True
 
-# 新增气泵控制函数
+# 气泵控制函数
 def set_pump_state(enabled):
     """设置气泵状态"""
     global pump_enabled
@@ -299,6 +347,7 @@ def check_water_level():
         logger.error(f"检测水位失败: {str(e)}")
         water_level = "error"
 
+# 读取DHT11温湿度传感器
 def read_dht11():
     """读取DHT11温湿度传感器"""
     global current_temp, current_humidity
@@ -353,7 +402,7 @@ def set_all_leds(color):
     except Exception as e:
         logger.error(f"设置LED时出错: {str(e)}")
 
-# 控制蜂鸣器
+# 控制蜂鸣器 默认2声滴答
 def beep_buzzer(num=2):
     try:
         pin = config['buzzer_pin']
@@ -462,9 +511,79 @@ def get_memory_usage():
     except:
         return None
 
+# 2025.8.20 获取指定网络接口的带宽使用率
+def get_network_usage(interface='wlan0', interval=1):
+    """
+    获取指定网络接口的带宽使用率
+    
+    参数:
+    interface: 网络接口名称 (默认: 'wlan0'，树莓派常用无线网卡)
+    interval: 采样间隔时间(秒) (默认: 1秒)
+    
+    返回:
+    dict: 包含上传和下载速度(KB/s)和使用率信息
+    None: 如果出错则返回None
+    """
+    try:
+        # 获取第一次网络IO计数
+        net_io_start = psutil.net_io_counters(pernic=True).get(interface)
+        if not net_io_start:
+            return None
+            
+        time.sleep(interval)
+        
+        # 获取第二次网络IO计数
+        net_io_end = psutil.net_io_counters(pernic=True).get(interface)
+        if not net_io_end:
+            return None
+        
+        # 计算上传和下载速度 (字节/秒 -> KB/秒)
+        upload_speed = (net_io_end.bytes_sent - net_io_start.bytes_sent) / interval / 1024
+        download_speed = (net_io_end.bytes_recv - net_io_start.bytes_recv) / interval / 1024
+        
+        return {
+            'upload_speed': round(upload_speed, 2),  # KB/s
+            'download_speed': round(download_speed, 2),  # KB/s
+            'interface': interface
+        }
+        
+    except Exception as e:
+        print(f"获取网络使用率出错: {e}")
+        return None
+
+# 2025.8.20 获取网络接口使用率百分比
+def get_network_usage_percent(interface='eth0', interval=1, max_speed=100000):
+    """
+    获取网络接口使用率百分比(相对于最大理论速度)
+    
+    参数:
+    interface: 网络接口名称
+    interval: 采样间隔
+    max_speed: 最大理论速度(KB/s)，默认100MBps ≈ 100000 KB/s
+
+    wlan0(无线), eth0(有线)
+    
+    返回:
+    float: 使用率百分比 (0-100)
+    None: 如果出错
+    """
+    try:
+        usage = get_network_usage(interface, interval)
+        if not usage:
+            return None
+            
+        # 计算总带宽使用率 (上传+下载)
+        total_speed = usage['upload_speed'] + usage['download_speed']
+        usage_percent = min((total_speed / max_speed) * 100, 100)
+        
+        return round(usage_percent, 2)
+        
+    except:
+        return None
+
 
 def sensor_reading_task():
-    """每30秒读取一次传感器数据的任务"""
+    """每60秒读取一次传感器数据的任务"""
     global current_temp, current_humidity, current_water_temp
     logger.info("启动传感器读取任务...")
     
@@ -483,7 +602,14 @@ def sensor_reading_task():
             water_temp = get_water_temp()
             if water_temp is not None:
                 current_water_temp = water_temp
-                #logger.info(f"水温读取成功: {water_temp}°C")
+                #水温低于27度，关闭风扇；水温高于30度，开启风扇 2025.8.19
+                if current_water_temp< min_temperature and fan_enabled: 
+                    logger.info(f"温度低{current_water_temp}°C低于{min_temperature}°C,关闭风扇")
+                    set_fan_state(False)
+                if current_water_temp > max_temperature and not fan_enabled : 
+                    logger.info(f"温度低{current_water_temp}°C高于{max_temperature}°C,开启风扇")
+                    set_fan_state(True)
+                
             else:
                 logger.warning("读取水温失败")
                 
@@ -491,13 +617,14 @@ def sensor_reading_task():
             logger.error(f"读取传感器数据时出错: {str(e)}")
         
         # 每10秒读取一次
-        time.sleep(30)
+        time.sleep(60)
 
 # 定时任务检查
 def check_feeding_schedules():
-    """检查并执行喂食计划的定时任务"""
+    global last_feed_time
+    """检查并执行计划的定时任务"""
     while True:
-        logger.info(f"定时喂食任务检查！")
+        logger.info(f"定时任务检查！")
         conn = None
         try:
             conn = sqlite3.connect(config['database_path'])
@@ -512,6 +639,7 @@ def check_feeding_schedules():
                     feed_time TEXT NOT NULL,  -- 存储格式 HH:MM
                     feed_days TEXT NOT NULL,  -- 存储格式 0,1,2,3,4,5,6 (0=周日)
                     portion_size INTEGER DEFAULT 1,
+                    typeid INTEGER DEFAULT 0, -- 记录类型,0=喂食,1=风扇,2=气泵,3=灌溉蓄水
                     last_feed_time INTEGER   -- 存储时间戳
                 )
             ''')
@@ -522,6 +650,7 @@ def check_feeding_schedules():
                     schedule_id INTEGER,
                     feed_time INTEGER NOT NULL,
                     portion_size INTEGER NOT NULL,
+                    typeid INTEGER DEFAULT 0, -- 记录类型,0=喂食,1=风扇,2=气泵,3=灌溉蓄水
                     FOREIGN KEY(schedule_id) REFERENCES feeding_schedules(id)
                 )
             ''')
@@ -530,58 +659,76 @@ def check_feeding_schedules():
             current_time = now.strftime('%H:%M')
             current_weekday = str((now.weekday() + 1) % 7)  # 转换为 0=周日, 1=周一, ..., 6=周六  # 0=周日, 6=周六
             logger.info(f"当前时间: {current_time}, 当前星期: {current_weekday}")  # 新增日志
+            current_timestamp = int(time.time())
             
-            # 获取所有启用的计划
+
+            # 获取所有符合条件的计划（优化查询）
             c.execute('''
-                SELECT id, portion_size, last_feed_time 
+                SELECT id, portion_size, last_feed_time, typeid, schedule_name
                 FROM feeding_schedules
                 WHERE enabled=1 AND feed_time=? AND feed_days LIKE ?
+                ORDER BY typeid  -- 按类型排序，先处理非喂食计划
             ''', (current_time, f'%{current_weekday}%'))
             
             for schedule in c.fetchall():
-                print(schedule)
-                schedule_id, portion_size, last_feed_time_ = schedule
-                current_timestamp = int(time.time())
+                schedule_id, portion_size, last_feed_time_,typeid_, schedule_name = schedule
+                should_execute = True
 
-                #last_feed_time_ 为该计划的最后喂食时间 ，last_feed_time为全局变量喂食时间 测试时请注意！
-                
-                # 检查冷却时间（至少3小时），如果从未喂食则last_feed_time_为None
-                if last_feed_time_ is None or (current_timestamp - last_feed_time) >= 10800:
-                    logger.info(f"执行喂食计划 {schedule_id}，投喂量 {portion_size}")
-                    
+                 # 仅喂食计划检查冷却时间
+                if typeid_ == 0 and last_feed_time_ is not None:
+                    time_diff = current_timestamp - last_feed_time_
+                    if time_diff < 10800:  # 3小时冷却
+                        logger.info(f"喂食计划 {schedule_name} 冷却中，剩余 {((10800-time_diff)//60)}分钟")
+                        should_execute = False
+
+                if should_execute:
                     try:
-                        # 执行喂食
-                        if 'servo' in globals():
-                            for _ in range(portion_size):
-                                servo.touwei()
-                                time.sleep(2)  # 每次投喂间隔2秒
+                        # 执行对应类型的计划，注意当风扇和气泵的，1、2这两个类别时，portion_size 1为开启，3为关闭
+                        if typeid_ == 0:  # 喂食
+                            logger.info(f"执行喂食计划: {schedule_name}")
+                            if 'servo' in globals():
+                                for _ in range(portion_size):
+                                    servo.touwei()
+                                    time.sleep(2)
+                                last_feed_time = time.time()  # 更新投喂时间
+
+                        elif typeid_ == 1:  # 风扇
+                            logger.info(f"执行风扇计划: {schedule_name}")
+                            set_fan_state(True)
+                        elif typeid_ == 2:  # 气泵
+                            logger.info(f"执行气泵计划: {schedule_name}")
+                            if portion_size == 1 :
+                                set_pump_state(True)
+                            elif portion_size ==3 :
+                                set_pump_state(False)
+
+                        elif typeid_ == 3:  # 灌溉
+                            logger.info(f"执行灌溉计划: {schedule_name}")
+                            run_water_pump_for_seconds(30*portion_size)
+                            
                         
-                        # 更新最后喂食时间
+                        # 更新最后执行时间和记录日志
                         c.execute('''
                             UPDATE feeding_schedules
                             SET last_feed_time=?
                             WHERE id=?
                         ''', (current_timestamp, schedule_id))
                         
-                        # 记录喂食日志
                         c.execute('''
                             INSERT INTO feeding_logs 
-                            (schedule_id, feed_time, portion_size)
-                            VALUES (?, ?, ?)
-                        ''', (schedule_id, current_timestamp, portion_size))
+                            (schedule_id, feed_time, portion_size, typeid)
+                            VALUES (?, ?, ?, ?)
+                        ''', (schedule_id, current_timestamp, portion_size, typeid_))
                         
                         conn.commit()
-                        logger.info(f"自动喂食完成: 计划ID {schedule_id}")
+                        logger.info(f"计划执行成功: {schedule_name} (ID:{schedule_id})")
                         
                     except Exception as e:
-                        logger.error(f"自动喂食失败: {str(e)}")
+                        logger.error(f"执行计划失败 {schedule_name}: {str(e)}")
                         conn.rollback()
-                else:
-                   print("最后的投喂时间不符合要求！")
-                   logger.info(f"执行喂食计划 {schedule_id}，时间差 {current_timestamp - last_feed_time}") 
         
         except Exception as e:
-            logger.error(f"检查喂食计划失败: {str(e)}")
+            logger.error(f"计划检查出错: {str(e)}")
             if conn:
                 conn.rollback()
         
@@ -589,7 +736,58 @@ def check_feeding_schedules():
             if conn:
                 conn.close()
         
-        time.sleep(60)  # 每分钟检查一次
+        time.sleep(60) 
+
+ # 访问记录函数，写入数据库
+@app.before_request
+def track_access():
+    """记录每个请求的访问信息到数据库"""
+    try:
+        g.start_time = time.time()
+        g.request_id = str(uuid.uuid4())
+        client_ip = request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+        path = request.path
+        method = request.method
+        
+        # 插入数据库
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO access_records 
+            (request_id, ip_address, path, method, user_agent, start_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (g.request_id, client_ip, path, method, user_agent, g.start_time))
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        logger.error(f"记录访问开始失败: {str(e)}")
+
+@app.after_request
+def after_request(response):
+    """更新请求结束时间到数据库"""
+    try:
+        if hasattr(g, 'start_time') and hasattr(g, 'request_id'):
+            end_time = time.time()
+            duration = end_time - g.start_time
+            
+            # 更新数据库记录
+            conn = sqlite3.connect(config['database_path'])
+            c = conn.cursor()
+            c.execute('''
+                UPDATE access_records 
+                SET end_time = ?, duration = ?, status_code = ?
+                WHERE request_id = ?
+            ''', (end_time, duration, response.status_code, g.request_id))
+            conn.commit()
+            conn.close()
+    
+    except Exception as e:
+        logger.error(f"更新访问结束时间失败: {str(e)}")
+    
+    return response
+      
 
 # ======================
 # Flask 路由
@@ -606,8 +804,8 @@ def index():
 def status():
     """系统状态API"""
     check_water_level()  # 每次请求时检测水位
-    #read_dht11()        # 读取温湿度
     feed_hours_ago = (time.time() - last_feed_time) / 3600.0 if last_feed_time > 0 else None
+    network_info = get_network_usage('eth0')
     with lock:
         return jsonify({
             "active": is_active,
@@ -615,12 +813,14 @@ def status():
             "last_activity": last_activity_time,
             "cpu_temp": get_cpu_temp(),
             "mem_usage": get_memory_usage(),
+            "upload_speed": network_info['upload_speed'],  # 上传速度
+            "download_speed": network_info['download_speed'], # 下载速度
             "water_temp": current_water_temp,  # 水温
             "fan_enabled": fan_enabled,  # 风扇状态
             "pump_enabled": pump_enabled,  # 气泵状态
-            "water_pump_enabled": water_pump_enabled, #水泵状态
+            "water_pump_enabled": water_pump_enabled, # 水泵状态
             "water_level": water_level,  # 水位状态
-            "temperature": current_temp,    # # 使用后台线程更新的温度
+            "temperature": current_temp,    # 使用后台线程更新的温度
             "humidity": current_humidity,    # 使用后台线程更新的湿度
             "feed_hours_ago": feed_hours_ago
         })
@@ -833,6 +1033,8 @@ def web_deactivate():
         threading.Thread(target=deactivate_leds, daemon=True).start()
         return jsonify({"status": "deactivated"})
 
+'''
+2025.8.19 废弃
 @app.route('/test_buzzer')
 def test_buzzer():
     """测试蜂鸣器API"""
@@ -841,7 +1043,7 @@ def test_buzzer():
  
     return jsonify({"status": "error"}), 500
 
-
+'''
 
 @app.route('/charts')
 def charts():
@@ -850,7 +1052,7 @@ def charts():
                            ip=get_local_ip(), 
                            port=5000)
 
-# 喂食计划管理API
+# 计划管理API
 @app.route('/api/feeding/schedules', methods=['GET', 'POST', 'DELETE'])
 def manage_schedules():
     try:
@@ -867,13 +1069,14 @@ def manage_schedules():
                 feed_days TEXT NOT NULL,
                 portion_size INTEGER DEFAULT 1,
                 last_feed_time INTEGER,
-                next_feed_time INTEGER
+                next_feed_time INTEGER,
+                typeid INTEGER DEFAULT 0
             )
         ''')
         
         if request.method == 'GET':
             # 获取所有喂食计划
-            c.execute('SELECT id, enabled, schedule_name, feed_time, feed_days, portion_size FROM feeding_schedules ORDER BY feed_time')
+            c.execute('SELECT id, enabled, schedule_name, feed_time, feed_days, portion_size,typeid FROM feeding_schedules ORDER BY feed_time')
             schedules = []
             for row in c.fetchall():
                 schedules.append({
@@ -882,7 +1085,9 @@ def manage_schedules():
                     'schedule_name': row[2],
                     'feed_time': row[3],
                     'feed_days': [int(d) for d in row[4].split(',') if d],
-                    'portion_size': row[5]
+                    'portion_size': row[5],
+                    'typeid': row[6]
+
                 })
             return jsonify(schedules)
         
@@ -905,7 +1110,7 @@ def manage_schedules():
                 # 更新现有计划
                 c.execute('''
                     UPDATE feeding_schedules SET
-                    enabled=?, schedule_name=?, feed_time=?, feed_days=?, portion_size=?
+                    enabled=?, schedule_name=?, feed_time=?, feed_days=?, portion_size=?,typeid=?
                     WHERE id=?
                 ''', (
                     int(data.get('enabled', True)),
@@ -913,6 +1118,7 @@ def manage_schedules():
                     data['feed_time'],
                     feed_days,
                     int(data['portion_size']),
+                    int(data['typeid']),
                     data['id']
                 ))
                 schedule_id = data['id']
@@ -920,14 +1126,15 @@ def manage_schedules():
                 # 创建新计划
                 c.execute('''
                     INSERT INTO feeding_schedules 
-                    (enabled, schedule_name, feed_time, feed_days, portion_size)
-                    VALUES (?, ?, ?, ?, ?)
+                    (enabled, schedule_name, feed_time, feed_days, portion_size,typeid)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     int(data.get('enabled', True)),
                     data['schedule_name'],
                     data['feed_time'],
                     feed_days,
-                    int(data['portion_size'])
+                    int(data['portion_size']),
+                    int(data['typeid'])
                 ))
                 schedule_id = c.lastrowid
             
@@ -935,7 +1142,7 @@ def manage_schedules():
             return jsonify({'status': 'success', 'id': schedule_id})
     
     except Exception as e:
-        logger.error(f"喂食计划管理错误: {str(e)}")
+        logger.error(f"计划管理错误: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
     finally:
         conn.close()
@@ -998,12 +1205,14 @@ def feed_fish():
 
         # 4. 检查冷却时间（带容错处理）
         current_time = time.time()
+        '''
         if last_feed_time > 0 and (current_time - last_feed_time) < 3 * 3600:
             remaining = (3 * 3600 - (current_time - last_feed_time)) / 60
             return jsonify({
                 "status": "error",
                 "message": f"距离上次投喂不足3小时，请{remaining:.1f}分钟后再试"
             }), 429
+        '''
 
         # 5. 执行投喂（带线程锁）
         with feed_lock:
@@ -1011,7 +1220,7 @@ def feed_fish():
             for _ in range(portion_size):
                 try:
                     servo.touwei()
-                    time.sleep(1)  # 每次投喂间隔1秒
+                    time.sleep(2)  # 每次投喂间隔2秒
                 except Exception as e:
                     logger.error(f"投喂动作执行失败: {str(e)}")
                     return jsonify({
@@ -1058,7 +1267,7 @@ def feed_fish():
             "message": "服务器内部错误"
         }), 500
 
-#删除喂食计划
+#删除计划
 @app.route('/api/feeding/schedules/<int:schedule_id>', methods=['DELETE'])
 def delete_schedule(schedule_id):
     
@@ -1075,7 +1284,7 @@ def delete_schedule(schedule_id):
         c.execute('DELETE FROM feeding_schedules WHERE id = ?', (schedule_id,))
         conn.commit()
         
-        logger.info(f"成功删除喂食计划: ID {schedule_id}")
+        logger.info(f"成功删除计划: ID {schedule_id}")
         return jsonify({"status": "success", "id": schedule_id})
     
     except sqlite3.Error as e:
@@ -1148,7 +1357,7 @@ def delete_feeding_log(log_id):
 
 @app.route('/feeding')
 def feeding():
-    """喂食管理页面"""
+    """计划管理页面"""
     return render_template('feeding.html', 
                          ip=get_local_ip(), 
                          port=5000)
@@ -1204,14 +1413,306 @@ def get_sensor_data():
 def check_network():
     """检查当前是否是内网访问"""
     client_ip = request.remote_addr
-    is_local = (client_ip == '127.0.0.1' or 
-               client_ip.startswith('192.168.') or               
-               client_ip.startswith('172.'))
+    is_local = (client_ip.startswith('192.168.') or               
+               client_ip.startswith('192.'))
     
     return jsonify({
         "is_local": is_local,
         "client_ip": client_ip
     })
+
+# 添加访问统计页面路由
+@app.route('/access_stats')
+def access_stats_page():
+    """访问统计页面"""
+    return render_template('access_stats.html', 
+                         ip=get_local_ip(), 
+                         port=5000)
+
+@app.route('/api/signin', methods=['POST'])
+def signin():
+    """签到接口"""
+    try:
+        #client_ip = request.remote_addr
+        client_ip = get_real_client_ip()
+        user_agent = request.headers.get('User-Agent', '')
+        signin_time = get_local_time()
+        
+        # 插入数据库
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO signin_records 
+            (ip_address, user_agent, signin_time)
+            VALUES (?, ?, ?)
+        ''', (client_ip, user_agent, signin_time))
+        conn.commit()
+        conn.close()
+
+        
+        if beep_buzzer(5):
+            logger.info(f"签到记录: IP={client_ip}, Time={signin_time}")        
+            return jsonify({
+                'status': 'success',
+                'message': '签到成功',
+                'ip': client_ip,
+                'time': signin_time
+            })
+    
+    except Exception as e:
+        logger.error(f"签到失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 修改访问统计函数，从数据库查询
+@app.route('/api/access/stats')
+def get_access_stats():
+    """获取访问统计数据（按独立IP统计）"""
+    try:
+        time_range = request.args.get('range', 'day')  # day, week, month
+        
+        # 计算时间范围
+        now = time.time()
+        if time_range == 'day':
+            start_time = now - 24 * 3600
+        elif time_range == 'week':
+            start_time = now - 7 * 24 * 3600
+        elif time_range == 'month':
+            start_time = now - 30 * 24 * 3600
+        else:
+            start_time = now - 24 * 3600
+        
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 查询总访问量（按独立IP）
+        c.execute('''
+            SELECT COUNT(DISTINCT ip_address) FROM access_records 
+            WHERE start_time >= ? AND end_time IS NOT NULL
+        ''', (start_time,))
+        unique_ips = c.fetchone()[0]
+        
+        # 查询总请求数
+        c.execute('''
+            SELECT COUNT(*) FROM access_records 
+            WHERE start_time >= ? AND end_time IS NOT NULL
+        ''', (start_time,))
+        total_requests = c.fetchone()[0]
+        
+        # 按时间分组统计独立IP数量
+        if time_range == 'day':
+            # 按小时统计独立IP
+            c.execute('''
+                SELECT strftime('%H:00', datetime(start_time, 'unixepoch', 'localtime')) as hour,
+                       COUNT(DISTINCT ip_address) as unique_ips
+                FROM access_records 
+                WHERE start_time >= ? AND end_time IS NOT NULL
+                GROUP BY hour
+                ORDER BY hour
+            ''', (start_time,))
+        elif time_range == 'week':
+            # 按天统计独立IP
+            c.execute('''
+                SELECT date(datetime(start_time, 'unixepoch', 'localtime')) as day,
+                       COUNT(DISTINCT ip_address) as unique_ips
+                FROM access_records 
+                WHERE start_time >= ? AND end_time IS NOT NULL
+                GROUP BY day
+                ORDER BY day
+            ''', (start_time,))
+        else:  # month
+            # 按天统计独立IP
+            c.execute('''
+                SELECT date(datetime(start_time, 'unixepoch', 'localtime')) as day,
+                       COUNT(DISTINCT ip_address) as unique_ips
+                FROM access_records 
+                WHERE start_time >= ? AND end_time IS NOT NULL
+                GROUP BY day
+                ORDER BY day
+            ''', (start_time,))
+        
+        stats_data = c.fetchall()
+        
+        # 获取最活跃的IP地址（前10个）
+        c.execute('''
+            SELECT ip_address, COUNT(*) as visit_count,
+                   MAX(datetime(start_time, 'unixepoch', 'localtime')) as last_visit
+            FROM access_records 
+            WHERE start_time >= ? AND end_time IS NOT NULL
+            GROUP BY ip_address
+            ORDER BY visit_count DESC
+            LIMIT 10
+        ''', (start_time,))
+        top_ips = c.fetchall()
+        
+        conn.close()
+        
+        labels = [item[0] for item in stats_data]
+        values = [item[1] for item in stats_data]
+        
+        # 格式化最活跃IP数据
+        top_ips_formatted = []
+        for ip_data in top_ips:
+            top_ips_formatted.append({
+                'ip': ip_data[0],
+                'visit_count': ip_data[1],
+                'last_visit': ip_data[2]
+            })
+        
+        return jsonify({
+            'labels': labels,
+            'values': values,
+            'unique_ips': unique_ips,
+            'total_requests': total_requests,
+            'top_ips': top_ips_formatted,
+            'time_range': time_range
+        })
+    
+    except Exception as e:
+        logger.error(f"获取访问统计失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 添加IP详情查询接口
+@app.route('/api/access/ip/<ip_address>')
+def get_ip_details(ip_address):
+    """获取特定IP的详细访问信息"""
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 获取IP基本信息
+        c.execute('''
+            SELECT COUNT(*) as total_visits,
+                   MIN(datetime(start_time, 'unixepoch', 'localtime')) as first_visit,
+                   MAX(datetime(start_time, 'unixepoch', 'localtime')) as last_visit,
+                   AVG(duration) as avg_duration
+            FROM access_records 
+            WHERE ip_address = ? AND end_time IS NOT NULL
+        ''', (ip_address,))
+        
+        ip_info = c.fetchone()
+        
+        # 获取访问路径统计
+        c.execute('''
+            SELECT path, COUNT(*) as visit_count,
+                   MAX(datetime(start_time, 'unixepoch', 'localtime')) as last_visit
+            FROM access_records 
+            WHERE ip_address = ? AND end_time IS NOT NULL
+            GROUP BY path
+            ORDER BY visit_count DESC
+        ''', (ip_address,))
+        
+        path_stats = []
+        for row in c.fetchall():
+            path_stats.append({
+                'path': row[0],
+                'visit_count': row[1],
+                'last_visit': row[2]
+            })
+        
+        # 获取最近访问记录
+        c.execute('''
+            SELECT datetime(start_time, 'unixepoch', 'localtime') as access_time,
+                   path, method, duration, status_code
+            FROM access_records 
+            WHERE ip_address = ? AND end_time IS NOT NULL
+            ORDER BY start_time DESC
+            LIMIT 20
+        ''', (ip_address,))
+        
+        recent_visits = []
+        for row in c.fetchall():
+            recent_visits.append({
+                'access_time': row[0],
+                'path': row[1],
+                'method': row[2],
+                'duration': f"{row[3]:.2f}s" if row[3] else 'N/A',
+                'status_code': row[4]
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'ip_address': ip_address,
+            'total_visits': ip_info[0],
+            'first_visit': ip_info[1],
+            'last_visit': ip_info[2],
+            'avg_duration': f"{ip_info[3]:.2f}s" if ip_info[3] else 'N/A',
+            'path_stats': path_stats,
+            'recent_visits': recent_visits
+        })
+    
+    except Exception as e:
+        logger.error(f"获取IP详情失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 签到记录查询，从数据库获取 2025.8.20
+@app.route('/api/signin/records')
+def get_signin_records():
+    """获取签到记录"""
+    try:
+        limit = min(int(request.args.get('limit', 20)), 100)
+        
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        c.execute('''
+            SELECT ip_address, user_agent, signin_time
+            FROM signin_records 
+            ORDER BY signin_time DESC 
+            LIMIT ?
+        ''', (limit,))
+        
+        records = []
+        for row in c.fetchall():
+            records.append({
+                'ip': row[0],
+                'user_agent': row[1],
+                'time': row[2]  # 格式化后的时间
+            })
+        
+        conn.close()
+        return jsonify(records)
+    
+    except Exception as e:
+        logger.error(f"获取签到记录失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 添加获取签到统计 2025.8.20
+@app.route('/api/signin/stats')
+def get_signin_stats():
+    """获取签到统计数据"""
+    try:
+        conn = sqlite3.connect(config['database_path'])
+        c = conn.cursor()
+        
+        # 总签到次数
+        c.execute('SELECT COUNT(*) FROM signin_records')
+        total_signins = c.fetchone()[0]
+        
+        # 独立IP签到数
+        c.execute('SELECT COUNT(DISTINCT ip_address) FROM signin_records')
+        unique_signin_ips = c.fetchone()[0]
+        
+        # 今日签到数
+        c.execute('''
+            SELECT COUNT(*) as count 
+            FROM signin_records 
+            WHERE DATE(signin_time) = DATE('now')
+        ''')
+        today_signins = c.fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            'total_signins': total_signins,
+            'unique_signin_ips': unique_signin_ips,
+            'today_signins': today_signins
+        })
+    
+    except Exception as e:
+        logger.error(f"获取签到统计失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 
 # ======================
 # 主程序
@@ -1219,13 +1720,13 @@ def check_network():
 
 def main():
     """程序入口"""
-    logger.info("====== 启动鱼缸监控控制系统V1.2 ======")
+    logger.info("====== 启动闲沐智能鱼缸系统V1.3 ======")
     
     # 初始化硬件
     init_gpio()
     init_led_strip()
-    # 首次读取温湿度
-    #read_dht11()
+    
+    #read_dht11() # 首次读取温湿度
     # 初始化舵机
     init_servo()
      # 注册退出清理函数
@@ -1240,7 +1741,7 @@ def main():
     monitor_thread = threading.Thread(target=monitor_motion_connections, daemon=True)
     monitor_thread.start()
 
-    # 启动喂食计划检查线程
+    # 启动计划检查线程
     feeding_thread = threading.Thread(target=check_feeding_schedules, daemon=True)
     feeding_thread.start()
     
