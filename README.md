@@ -53,9 +53,15 @@
 - 1路水温监测 3P排母
 - 备用 5v、3v3、4个GPIO 排针
 - 18P 排针（用杜邦线连接树莓派）
+如有需要  [请点击这里访问](https://www.goofish.com/item?spm=a21ybx.personal.feeds.1.596b2358xB7LkT&id=965639435219&categoryId=125952002)
+  
+
+  ## 与树莓派连线图
+  
+  ![如何接树莓派](/c.png)
 
 
-如有需要  [请点击这里访问](https://www.goofish.com/item?spm=a21ybx.personal.feeds.1.596b2358xB7LkT&id=965639435219&categoryId=125952002)  
+  
 
 
 ## 3D打印件
