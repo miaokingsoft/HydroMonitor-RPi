@@ -60,7 +60,13 @@
 
 ## 3D打印件
 - [风扇支架](https://makerworld.com.cn/zh/models/1435672-yu-gang-feng-shan-zhi-jia-x4#profileId-1559928)
-- 自动喂食器 （整理中）
+- [自动喂食器](https://makerworld.com.cn/zh/models/1509194-zhi-neng-yu-gang-xi-tong-zu-jian-zhi-zi-dong-wei-y?from=search#profileId-1647953)
+- [可调电源壁挂支架](https://makerworld.com.cn/zh/models/1509171-ke-diao-12vdian-yuan-bi-gua-zhi-jia#profileId-1647928)
+- PCB板壁挂架 （整理中）
+- led灯带贴合鱼缸壁组件（整理中）
+- 理线管卡（整理中）
+- 370水泵支架（整理中）
+- 滴灌头（整理中）
 
 ## 在树莓派上安装 Motion
 ```markdown
