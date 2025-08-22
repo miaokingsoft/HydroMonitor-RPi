@@ -3,21 +3,18 @@ import time
 
 class SG90Servo:
     def __init__(self, gpio_pin=26, frequency=50):
-        """
-        初始化SG90舵机控制器
-        :param gpio_pin: 控制引脚 (BCM编号)
-        :param frequency: PWM频率 (Hz)
-        """
         self.gpio_pin = gpio_pin
         self.frequency = frequency
+        self._initialized = False
         
-        # 设置GPIO模式
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.gpio_pin, GPIO.OUT)
-        
-        # 创建PWM实例
-        self.pwm = GPIO.PWM(self.gpio_pin, self.frequency)
-        self.pwm.start(0)
+        try:
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self.gpio_pin, GPIO.OUT)
+            self.pwm = GPIO.PWM(self.gpio_pin, self.frequency)
+            self.pwm.start(0)
+            self._initialized = True            
+        except Exception as e:           
+            raise
         
     def set_angle(self, angle):
         """
@@ -30,7 +27,7 @@ class SG90Servo:
             angle = 180
             
         # SG90舵机角度与占空比转换公式
-        duty_cycle = (angle / 18) + 2
+        duty_cycle = (angle / 18)+2
         self.pwm.ChangeDutyCycle(duty_cycle)
         time.sleep(0.3)  # 给舵机时间转动到指定位置
     
@@ -54,22 +51,29 @@ class SG90Servo:
     def touwei(self): 
         print("舵机回位准备投喂")
         self.set_angle(180)
-        time.sleep(2)        
-        print("舵机到15度")
-        self.set_angle(15)
+        print("舵机到180度")
         time.sleep(2)        
         print("设置舵机回位")
-        self.set_angle(180)
+        self.set_angle(0)
+        time.sleep(2) 
+        print("投喂结束")
+        self.pwm.ChangeDutyCycle(0) # 关闭PWM信号，防止舵机抖动
+
+        
 
     
 
     
     def cleanup(self):
-        """
-        清理GPIO资源
-        """
-        self.pwm.stop()
-        GPIO.cleanup()
+        """安全的资源清理"""
+        if self._initialized:
+            try:
+                self.pwm.stop()
+                GPIO.cleanup(self.gpio_pin)
+                self._initialized = False
+                
+            except Exception as e:
+                print(f"清理资源时出错: {e}")
 
 
 
@@ -80,9 +84,11 @@ if __name__ == "__main__":
     try:
          # 创建舵机实例，使用GPIO18
         servo = SG90Servo(gpio_pin=26)
-        for i in range(3):
-            time.sleep(5)
-            servo.touwei()
+        time.sleep(10)
+        #for _ in range(3):
+        #    servo.touwei()
+        #    time.sleep(5)
+        
         #print("舵机扫动演示 (0-180度)")
         #servo.sweep(0, 180)
         
@@ -90,7 +96,7 @@ if __name__ == "__main__":
         #servo.sweep(180, 0)
         
         #print("设置舵机回到中间位置 (90度)")
-        #servo.set_angle(90)
+        #servo.set_angle(180)
         
     except KeyboardInterrupt:
         print("程序被用户中断")
