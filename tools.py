@@ -12,10 +12,12 @@ import sys
 import shutil
 import logging
 import sqlite3
+import subprocess
 from datetime import datetime
 
 # 配置常量
 LOG_FILE = "/var/log/fishtank_monitor.log"
+LOG_FISHTANK = "/var/log/motion/motion.log"
 DB_FILE = "/var/lib/fishtank/sensor_data.db"
 DB_BACKUP_DIR = "/home/miaoking/mycode/YuGang/backup"
 
@@ -250,16 +252,51 @@ def backup_database():
     except Exception as e:
         logger.error(f"数据库备份失败: {str(e)}")
 
-def clear_log():
+def clear_log(file_url):
     """
     清空日志文件内容（不删除文件）
+    使用多种方法确保文件被真正清空
     """
     try:
-        with open(LOG_FILE, 'w', encoding='utf-8') as f:
+        # 记录原始文件大小
+        original_size = os.path.getsize(file_url) if os.path.exists(file_url) else 0
+        
+        print(f"正在清空日志文件: {file_url}")
+        print(f"原始文件大小: {original_size} 字节")
+        
+        # 方法1：使用truncate命令（最彻底）
+        try:
+            # 使用系统命令直接截断文件
+            subprocess.run(['truncate', '-s', '0', file_url], check=True)
+            print("使用方法1 (truncate) 清空成功")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # 方法2：使用echo命令
+            try:
+                subprocess.run(['sh', '-c', f'echo -n > {file_url}'], check=True)
+                print("使用方法2 (echo) 清空成功")
+            except subprocess.CalledProcessError:
+                # 方法3：使用Python的truncate方法
+                with open(file_url, 'r+', encoding='utf-8') as f:
+                    f.truncate(0)
+                print("使用方法3 (Python truncate) 清空成功")
+        
+        # 验证清空结果
+        new_size = os.path.getsize(file_url)
+        print(f"清空后文件大小: {new_size} 字节")
+        
+        # 写入清空记录
+        with open(file_url, 'a', encoding='utf-8') as f:
             f.write(f"日志清理于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        logger.info(f"日志文件已清空: {LOG_FILE}")
+        
+        final_size = os.path.getsize(file_url)
+        print(f"写入记录后文件大小: {final_size} 字节")
+        
+        logger.info(f"日志文件已清空: {file_url} (原始: {original_size}字节 → 最终: {final_size}字节)")
+        print(f"✓ 日志文件清空完成: {file_url}")
+        
     except Exception as e:
         logger.error(f"日志清空失败: {str(e)}")
+        print(f"✗ 日志清空失败: {str(e)}")
 
 def show_menu():
     """
@@ -269,11 +306,12 @@ def show_menu():
     print("1. 备份数据库")
     print("2. 清空日志")
     print("3. 数据库管理")
+    print("4. 清空motion.log")
     print("0. 退出")
     print("=" * 30)
     
     try:
-        choice = input("请选择操作 (0-3): ").strip()
+        choice = input("请选择操作 (0-4): ").strip()
         return int(choice)
     except ValueError:
         logger.warning("无效的输入，请输入数字 0-3")
@@ -294,10 +332,15 @@ def main():
         elif choice == 2:
             confirm = input("警告：此操作将清空日志文件，确认继续？(y/N): ")
             if confirm.lower() == 'y':
-                clear_log()
+                clear_log(LOG_FILE)
             else:
                 logger.info("日志清空操作已取消")
-                
+        elif choice == 4:
+            confirm = input("警告：此操作将清空日志文件，确认继续？(y/N): ")
+            if confirm.lower() == 'y':
+                clear_log(LOG_FISHTANK)
+            else:
+                logger.info("日志清空操作已取消")        
         elif choice == 3:
             manage_database()
             
