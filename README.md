@@ -1,6 +1,8 @@
 # HydroMonitor-RPi 
 # 闲沐智能鱼缸系统v1.3
 
+[English](README_en.md)
+
 基于树莓派的智能鱼缸监控系统，使用 Flask 构建 Web 界面，并提供传感器接线板PCB：
 
 ## 功能特性
