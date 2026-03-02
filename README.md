@@ -40,7 +40,7 @@
 - DS18B20水温监控模块（探头和板一套）
 - USB摄像头（最好有自动对焦功能）
 - 5V 3A电源（给风扇、气泵供电）
-- 智能鱼缸接线板 （[PCB已打板，需要请访问这里](https://www.goofish.com/item?spm=a21ybx.personal.feeds.1.596b2358xB7LkT&id=965639435219&categoryId=125952002)）
+- 智能鱼缸接线板 （[PCB已打板，需要请访问这里](https://www.goofish.com/item?spm=a21ybx.personal.feeds.27.4af26ac2QFLrIW&id=1006150632854&categoryId=50023914)）
 - 杜邦线等等耗材
   
 ## 硬件接线板
@@ -84,6 +84,7 @@
 ```markdown
 sudo apt update
 sudo apt install motion
+sudo motion
 ```
 - 注意： Raspbian 仓库中的版本可能不是最新的。如果需要最新特性或 bug 修复，可以从源代码编译安装（过程稍复杂，需查阅官方文档）。
 - 主配置文件： /etc/motion/motion.conf 这是全局配置文件，修改它需要 root 权限 (sudo nano /etc/motion/motion.conf)。
