@@ -174,3 +174,7 @@ sudo python fishtank.py
 - 抖音：@闲沐工坊
 - QQ：7740840
 
+- [闲沐连环画](https://www.wwzu.com/)
+- [闲沐数观](https://www.mooview.cn)
+- [村上隆太阳花DIY配色工具](https://sun.wwzu.com)
+
