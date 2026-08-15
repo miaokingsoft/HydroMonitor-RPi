@@ -1,4 +1,9 @@
 # HydroMonitor-RPi 
+# 闲沐智能鱼缸系统v2.0
+- 开发中
+预览效果 [请点击这里访问](https://fish.wwzu.com)
+
+
 # 闲沐智能鱼缸系统v1.3
 
 [English](README_en.md)
